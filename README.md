@@ -30,6 +30,16 @@ npm install
 npm run dev
 ```
 
+## 게임 기능
+
+- 플레이어 PIN: `1004`
+- 마스터 PIN: `4001`
+- 테스트 PIN: `0000`
+
+마스터 화면에서 총 인원, 마피아 팀 인원, 경찰/의사/보디가드/영매/스파이 수, 라운드 시간을 설정할 수 있습니다. 설정 후 인원이 모두 접속하면 게임을 시작하세요.
+
+`0000`으로 들어가면 실제 접속자 없이 마스터, 마피아, 경찰, 의사, 보디가드, 영매, 시민 화면을 번갈아 확인할 수 있습니다.
+
 ## GitHub Pages 배포
 
 이 저장소를 GitHub에 올린 뒤 Repository Settings → Pages → Source를 `GitHub Actions`로 설정합니다. `main` 또는 `master` 브랜치에 push하면 `.github/workflows/deploy.yml`이 자동으로 빌드하고 배포합니다.

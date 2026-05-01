@@ -1,18 +1,43 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Lock, User, Skull, Users, MessageSquare, Send,
-  Eye, ChevronRight, Check, Loader2,
-  Play, RotateCcw, Vote, Shield, Radio,
-  AlertCircle, ArrowLeft, LogOut, Crosshair,
-  Activity, Delete, Fingerprint, UserCheck
+  Activity,
+  AlertCircle,
+  ArrowLeft,
+  Check,
+  ChevronRight,
+  Clock,
+  Crosshair,
+  Delete,
+  Eye,
+  Fingerprint,
+  Loader2,
+  Lock,
+  LogOut,
+  MessageSquare,
+  Minus,
+  Moon,
+  Play,
+  Plus,
+  Radio,
+  RotateCcw,
+  Search,
+  Send,
+  Settings,
+  Shield,
+  Skull,
+  Stethoscope,
+  User,
+  UserCheck,
+  Users,
+  Vote,
 } from "lucide-react";
 
 // ===================== CONSTANTS =====================
 const PLAYER_PIN = "1004";
 const ADMIN_PIN = "4001";
-const TOTAL_PLAYERS = 6;
-const KILLER_COUNT = 2;
+const TEST_PIN = "0000";
 const POLL_MS = 1200;
+const TOTAL_ROUNDS = 4;
 
 const K = {
   state: "dn_state",
@@ -20,85 +45,176 @@ const K = {
   roles: "dn_roles",
   chat: "dn_chat",
   votes: "dn_votes",
+  config: "dn_config",
 };
+
 const M = {
   id: "dn_my_id",
   auth: "dn_my_auth",
   name: "dn_my_name",
 };
 
-// ===================== ROUND DATA =====================
+const ROLE_DEFS = {
+  killer: {
+    name: "마피아",
+    code: "MAFIA",
+    team: "mafia",
+    icon: Skull,
+    tone: "rose",
+    brief: "시민들 사이에 숨어 정체를 숨기는 범인입니다.",
+    mission: "토론에서 의심을 피하고, 최종 투표에서 한 명이라도 살아남으세요.",
+    win: "마피아 팀이 최종 투표에서 생존하면 승리",
+  },
+  spy: {
+    name: "스파이",
+    code: "SPY",
+    team: "mafia",
+    icon: Eye,
+    tone: "rose",
+    brief: "마피아 편에 선 보조 직업입니다.",
+    mission: "시민처럼 행동하며 마피아가 들키지 않도록 흐름을 흔드세요.",
+    win: "마피아 팀 승리 시 함께 승리",
+  },
+  detective: {
+    name: "경찰",
+    code: "DETECTIVE",
+    team: "town",
+    icon: Search,
+    tone: "cyan",
+    brief: "의심 대상을 조사해 추리의 중심을 잡는 직업입니다.",
+    mission: "발언과 투표 흐름을 보고 의심 대상을 좁히세요.",
+    win: "마피아 팀을 모두 색출하면 승리",
+  },
+  doctor: {
+    name: "의사",
+    code: "DOCTOR",
+    team: "town",
+    icon: Stethoscope,
+    tone: "emerald",
+    brief: "시민 편의 생존을 돕는 보호 직업입니다.",
+    mission: "누가 공격받을지 예측하고, 중요한 시민을 지키는 척도를 잡으세요.",
+    win: "마피아 팀을 모두 색출하면 승리",
+  },
+  bodyguard: {
+    name: "보디가드",
+    code: "GUARD",
+    team: "town",
+    icon: Shield,
+    tone: "amber",
+    brief: "핵심 시민을 지키는 방어형 직업입니다.",
+    mission: "경찰이나 의사로 보이는 사람을 보호 대상으로 생각하세요.",
+    win: "마피아 팀을 모두 색출하면 승리",
+  },
+  shaman: {
+    name: "영매",
+    code: "MEDIUM",
+    team: "town",
+    icon: Moon,
+    tone: "violet",
+    brief: "탈락자의 말과 투표 기록을 해석하는 정보형 직업입니다.",
+    mission: "탈락자가 남긴 단서와 모순을 정리해 시민을 설득하세요.",
+    win: "마피아 팀을 모두 색출하면 승리",
+  },
+  citizen: {
+    name: "시민",
+    code: "CITIZEN",
+    team: "town",
+    icon: UserCheck,
+    tone: "cyan",
+    brief: "특수 능력은 없지만 토론과 투표의 힘을 가진 시민입니다.",
+    mission: "발언의 모순을 찾고 마피아를 최종 투표로 색출하세요.",
+    win: "마피아 팀을 모두 색출하면 승리",
+  },
+};
+
+const SPECIAL_ROLE_IDS = ["killer", "detective", "doctor", "bodyguard", "shaman", "spy"];
+
+const DEFAULT_CONFIG = {
+  totalPlayers: 6,
+  roundSeconds: 300,
+  roles: {
+    killer: 2,
+    detective: 1,
+    doctor: 1,
+    bodyguard: 0,
+    shaman: 0,
+    spy: 0,
+  },
+};
+
 const ROUNDS = [
   null,
   {
-    code: "R01 // INFILTRATION",
-    title: "접속 확인",
+    code: "R01 // ROLE_ASSIGNMENT",
+    title: "신원 확인",
     label: "ROUND 01",
     text: [
       "당신은 익명의 초대장을 받았다.",
-      "「24시간. 5개의 미션. 상금 10억.」",
-      "그러나 마지막 줄이 있었다 —",
-      "「당신들 중 2명은 우리 측 사람이다.」",
+      "같은 방에 모인 사람들 중 일부는 네트워크를 무너뜨리려 한다.",
+      "마스터가 직업을 배정했다. 자신의 화면만 확인하라.",
     ],
-    instruction: "역할이 부여되었습니다. 자신의 신분 카드를 확인하세요.",
-    duration: "준비 단계",
+    instruction: "역할 카드를 확인하고 토론을 준비하세요.",
   },
   {
-    code: "R02 // FIRST_BREACH",
-    title: "첫 번째 신호",
+    code: "R02 // FIRST_DISCUSSION",
+    title: "첫 번째 토론",
     label: "ROUND 02",
     text: [
-      "관리자 콘솔에서 침입 흔적이 감지되었다.",
-      "누군가 — 이 안의 누군가가 — 외부로 데이터를 빼돌리려 했다.",
-      "추적은 차단되었다. 신호의 주인은 알 수 없다.",
+      "첫 번째 신호가 감지되었다.",
+      "누군가 거짓말을 시작했다. 말의 순서, 방어 방식, 시선의 흔들림을 기록하라.",
+      "특수 직업은 너무 빨리 정체를 드러내지 않는 것이 좋다.",
     ],
-    instruction: "5분간 자유 토론. 의심되는 자를 추궁하라.",
-    duration: "5 분",
+    instruction: "의심되는 사람을 압박하고, 자신의 논리를 세우세요.",
   },
   {
-    code: "R03 // FRACTURE",
-    title: "균열",
+    code: "R03 // PRESSURE",
+    title: "압박",
     label: "ROUND 03",
     text: [
-      "두 번째 미션 — 누군가가 의도적으로 실패시켰다.",
-      "콘솔 로그에 짧은 외부 통신 흔적이 남았다.",
-      "잠입자는 둘. 그들은 서로 신호를 주고받는다.",
+      "대화 속 모순이 커지고 있다.",
+      "마피아는 서로를 보호하거나 일부러 선을 긋는다.",
+      "경찰과 의사의 힌트가 있다면 시민들이 알아볼 수 있게 말해야 한다.",
     ],
-    instruction: "5분 더. 더 깊이 파고들어라.",
-    duration: "5 분",
+    instruction: "발언 기록을 비교하고 후보를 좁히세요.",
   },
   {
-    code: "R04 // ENDGAME",
-    title: "마지막 단서",
+    code: "R04 // FINAL_CALL",
+    title: "최종 판단",
     label: "ROUND 04",
     text: [
-      "마지막 정보가 도착했다.",
-      "잠입자들에게는 시간이 없다.",
-      "지금까지의 모든 발언, 모든 모순을 떠올려라.",
-      "토론은 마지막이다. 다음은 — 투표다.",
+      "마지막 토론이다.",
+      "지금까지의 모든 발언, 방어, 침묵이 단서다.",
+      "다음 단계는 비밀 투표다.",
     ],
-    instruction: "마지막 토론. 지목할 자를 결정하라.",
-    duration: "3 분",
+    instruction: "최종 투표에서 지목할 사람을 결정하세요.",
   },
 ];
-
-const TOTAL_ROUNDS = 4;
 
 // ===================== STORAGE HELPERS =====================
 async function getKey(key, shared = true) {
   try {
     const r = await window.storage.get(key, shared);
     if (!r) return null;
-    try { return JSON.parse(r.value); } catch { return r.value; }
-  } catch { return null; }
+    try {
+      return JSON.parse(r.value);
+    } catch {
+      return r.value;
+    }
+  } catch {
+    return null;
+  }
 }
+
 async function setKey(key, value, shared = true) {
   try {
     const v = typeof value === "string" ? value : JSON.stringify(value);
     await window.storage.set(key, v, shared);
     return true;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
+
 async function txKey(key, updater, shared = true) {
   if (window.storage.transaction) {
     return window.storage.transaction(key, updater, shared);
@@ -108,21 +224,103 @@ async function txKey(key, updater, shared = true) {
   await setKey(key, next, shared);
   return next;
 }
+
 async function delKey(key, shared = true) {
-  try { await window.storage.delete(key, shared); } catch {}
+  try {
+    await window.storage.delete(key, shared);
+  } catch {}
 }
+
 function genId() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
+
 function shortId(id) {
   return id ? id.slice(0, 4).toUpperCase() : "----";
 }
+
 function timeAgo(ts) {
   const s = Math.floor((Date.now() - ts) / 1000);
   if (s < 5) return "방금";
   if (s < 60) return `${s}초 전`;
   if (s < 3600) return `${Math.floor(s / 60)}분 전`;
   return `${Math.floor(s / 3600)}시간 전`;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, Number(value) || 0));
+}
+
+function normalizeConfig(input = DEFAULT_CONFIG) {
+  const base = input || DEFAULT_CONFIG;
+  const totalPlayers = clamp(base.totalPlayers ?? DEFAULT_CONFIG.totalPlayers, 4, 20);
+  const roundSeconds = clamp(base.roundSeconds ?? DEFAULT_CONFIG.roundSeconds, 30, 1800);
+  const roles = {};
+  SPECIAL_ROLE_IDS.forEach((roleId) => {
+    roles[roleId] = clamp(base.roles?.[roleId] ?? DEFAULT_CONFIG.roles[roleId] ?? 0, 0, 20);
+  });
+  const specialTotal = SPECIAL_ROLE_IDS.reduce((sum, id) => sum + roles[id], 0);
+  roles.citizen = Math.max(0, totalPlayers - specialTotal);
+  return { totalPlayers, roundSeconds, roles };
+}
+
+function roleTotal(config) {
+  const cfg = normalizeConfig(config);
+  return Object.values(cfg.roles).reduce((sum, n) => sum + n, 0);
+}
+
+function mafiaCount(configOrRoles) {
+  if (!configOrRoles) return 0;
+  if (configOrRoles.roles) {
+    return Object.entries(configOrRoles.roles).reduce((sum, [role, count]) => {
+      return sum + (ROLE_DEFS[role]?.team === "mafia" ? count : 0);
+    }, 0);
+  }
+  return Object.values(configOrRoles).filter((role) => ROLE_DEFS[role]?.team === "mafia").length;
+}
+
+function isConfigValid(config) {
+  const cfg = normalizeConfig(config);
+  const specialTotal = SPECIAL_ROLE_IDS.reduce((sum, id) => sum + cfg.roles[id], 0);
+  return cfg.totalPlayers >= 4 && specialTotal <= cfg.totalPlayers && mafiaCount(cfg) > 0;
+}
+
+function buildRoleDeck(config) {
+  const cfg = normalizeConfig(config);
+  const deck = [];
+  Object.entries(cfg.roles).forEach(([role, count]) => {
+    for (let i = 0; i < count; i += 1) deck.push(role);
+  });
+  return deck.slice(0, cfg.totalPlayers);
+}
+
+function shuffle(list) {
+  return [...list].sort(() => Math.random() - 0.5);
+}
+
+function getRoleDef(role) {
+  return ROLE_DEFS[role] || ROLE_DEFS.citizen;
+}
+
+function roleToneClasses(role) {
+  const tone = getRoleDef(role).tone;
+  if (tone === "rose") return "border-rose-500/60 text-rose-300 bg-rose-500/10";
+  if (tone === "emerald") return "border-emerald-500/60 text-emerald-300 bg-emerald-500/10";
+  if (tone === "amber") return "border-amber-500/60 text-amber-300 bg-amber-500/10";
+  if (tone === "violet") return "border-violet-500/60 text-violet-300 bg-violet-500/10";
+  return "border-cyan-400/60 text-cyan-300 bg-cyan-400/10";
+}
+
+function roleAccent(role) {
+  const team = getRoleDef(role).team;
+  return team === "mafia" ? "rose" : "cyan";
+}
+
+function formatTime(seconds) {
+  const s = Math.max(0, seconds);
+  const m = Math.floor(s / 60);
+  const rest = s % 60;
+  return `${String(m).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
 }
 
 // ===================== MAIN APP =====================
@@ -138,8 +336,8 @@ export default function App() {
   const [roles, setRoles] = useState({});
   const [chat, setChat] = useState([]);
   const [votes, setVotes] = useState({});
+  const [gameConfig, setGameConfig] = useState(normalizeConfig(DEFAULT_CONFIG));
 
-  // === Initial load ===
   useEffect(() => {
     (async () => {
       let id = await getKey(M.id, false);
@@ -160,18 +358,19 @@ export default function App() {
     })();
   }, []);
 
-  // === Polling ===
   useEffect(() => {
-    if (route === "loading" || route === "splash" || route === "pin") return;
+    if (route === "loading" || route === "splash" || route === "pin" || route === "test") return;
     let cancelled = false;
+
     const poll = async () => {
       try {
-        const [s, p, r, c, v] = await Promise.all([
+        const [s, p, r, c, v, cfg] = await Promise.all([
           getKey(K.state),
           getKey(K.players),
           getKey(K.roles),
           getKey(K.chat),
           getKey(K.votes),
+          getKey(K.config),
         ]);
         if (cancelled) return;
         setGameState(s || { phase: "lobby", round: 0 });
@@ -179,22 +378,35 @@ export default function App() {
         setRoles(r || {});
         setChat(Array.isArray(c) ? c : []);
         setVotes(v || {});
+        setGameConfig(normalizeConfig(cfg || DEFAULT_CONFIG));
       } catch {}
     };
+
     poll();
     const id = setInterval(poll, POLL_MS);
-    return () => { cancelled = true; clearInterval(id); };
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [route]);
 
-  // === Handlers ===
-  const handlePickRole = (kind) => { setPinFor(kind); setRoute("pin"); };
+  const handlePickRole = (kind) => {
+    setPinFor(kind);
+    setRoute("pin");
+  };
+
+  const handleTestAccess = () => {
+    setAuthedAs("test");
+    setMyName("테스트");
+    setRoute("test");
+  };
 
   const handlePinSuccess = async (kind) => {
     setAuthedAs(kind);
     await setKey(M.auth, kind, false);
     if (kind === "admin") {
-      setMyName("운영자");
-      await setKey(M.name, "운영자", false);
+      setMyName("마스터");
+      await setKey(M.name, "마스터", false);
       setRoute("admin");
     } else {
       const existing = await getKey(M.name, false);
@@ -212,28 +424,29 @@ export default function App() {
     if (!trimmed) return { ok: false, msg: "이름을 입력하세요." };
 
     const state = (await getKey(K.state)) || { phase: "lobby", round: 0 };
+    const cfg = normalizeConfig((await getKey(K.config)) || gameConfig);
     let result = { ok: true };
 
     await txKey(K.players, (current) => {
       const list = Array.isArray(current) ? [...current] : [];
-      const existing = list.find(p => p.id === myId);
+      const existing = list.find((p) => p.id === myId);
 
       if (!existing) {
         if (state.phase !== "lobby") {
           result = { ok: false, msg: "게임이 이미 진행 중입니다." };
           return list;
         }
-        if (list.length >= TOTAL_PLAYERS) {
+        if (list.length >= cfg.totalPlayers) {
           result = { ok: false, msg: "정원이 가득 찼습니다." };
           return list;
         }
-        if (list.find(p => p.name === trimmed)) {
+        if (list.find((p) => p.name === trimmed)) {
           result = { ok: false, msg: "이미 사용 중인 이름입니다." };
           return list;
         }
         list.push({ id: myId, name: trimmed, joinedAt: Date.now() });
       } else {
-        if (list.some(p => p.id !== myId && p.name === trimmed)) {
+        if (list.some((p) => p.id !== myId && p.name === trimmed)) {
           result = { ok: false, msg: "이미 사용 중인 이름입니다." };
           return list;
         }
@@ -257,7 +470,7 @@ export default function App() {
       if (state.phase === "lobby") {
         await txKey(K.players, (current) => {
           const list = Array.isArray(current) ? current : [];
-          return list.filter(p => p.id !== myId);
+          return list.filter((p) => p.id !== myId);
         });
       }
     }
@@ -268,27 +481,72 @@ export default function App() {
     setRoute("splash");
   };
 
-  // === Admin actions ===
+  const handleSaveConfig = async (nextConfig) => {
+    const normalized = normalizeConfig(nextConfig);
+    setGameConfig(normalized);
+    await setKey(K.config, normalized);
+  };
+
   const handleStartGame = async () => {
+    const cfg = normalizeConfig((await getKey(K.config)) || gameConfig);
     const currentPlayers = (await getKey(K.players)) || players;
-    if (currentPlayers.length !== TOTAL_PLAYERS) return;
-    const shuffled = [...currentPlayers].sort(() => Math.random() - 0.5);
-    const killerIds = shuffled.slice(0, KILLER_COUNT).map(p => p.id);
+    if (!isConfigValid(cfg) || currentPlayers.length !== cfg.totalPlayers) return;
+
+    const deck = shuffle(buildRoleDeck(cfg));
     const newRoles = {};
-    currentPlayers.forEach(p => {
-      newRoles[p.id] = killerIds.includes(p.id) ? "killer" : "citizen";
+    currentPlayers.forEach((p, index) => {
+      newRoles[p.id] = deck[index] || "citizen";
     });
+
+    const now = Date.now();
     await setKey(K.roles, newRoles);
     await setKey(K.chat, []);
     await setKey(K.votes, {});
-    await setKey(K.state, { phase: "playing", round: 1, startedAt: Date.now() });
+    await setKey(K.state, {
+      phase: "playing",
+      round: 1,
+      startedAt: now,
+      roundStartedAt: now,
+      roundEndsAt: now + cfg.roundSeconds * 1000,
+    });
   };
 
   const handleAdvanceRound = async () => {
+    const cfg = normalizeConfig(gameConfig);
+    const now = Date.now();
     if (gameState.round < TOTAL_ROUNDS) {
-      await setKey(K.state, { ...gameState, round: gameState.round + 1 });
+      await setKey(K.state, {
+        ...gameState,
+        round: gameState.round + 1,
+        roundStartedAt: now,
+        roundEndsAt: now + cfg.roundSeconds * 1000,
+      });
     } else {
-      await setKey(K.state, { ...gameState, phase: "voting" });
+      await setKey(K.state, {
+        ...gameState,
+        phase: "voting",
+        votingStartedAt: now,
+        votingEndsAt: now + cfg.roundSeconds * 1000,
+      });
+    }
+  };
+
+  const handleRestartTimer = async () => {
+    const cfg = normalizeConfig(gameConfig);
+    const now = Date.now();
+    if (gameState.phase === "playing") {
+      await setKey(K.state, {
+        ...gameState,
+        roundStartedAt: now,
+        roundEndsAt: now + cfg.roundSeconds * 1000,
+      });
+    }
+    if (gameState.phase === "voting") {
+      await setKey(K.state, {
+        ...gameState,
+        votingStartedAt: now,
+        votingEndsAt: now + cfg.roundSeconds * 1000,
+      });
     }
   };
 
@@ -304,7 +562,6 @@ export default function App() {
     await setKey(K.votes, {});
   };
 
-  // === Chat ===
   const handleSendChat = async (text) => {
     if (!text.trim()) return;
     await txKey(K.chat, (current) => {
@@ -321,7 +578,6 @@ export default function App() {
     });
   };
 
-  // === Voting ===
   const handleSubmitVote = async (targetIds) => {
     await txKey(K.votes, (current) => {
       const next = current && typeof current === "object" && !Array.isArray(current) ? { ...current } : {};
@@ -332,11 +588,11 @@ export default function App() {
 
   const myRole = roles[myId];
 
-  // === Render ===
   return (
-    <div className="min-h-screen bg-black text-white relative overflow-hidden" style={{
-      fontFamily: "'Pretendard Variable', 'Pretendard', -apple-system, sans-serif",
-    }}>
+    <div
+      className="min-h-screen bg-black text-white relative overflow-hidden"
+      style={{ fontFamily: "'Pretendard Variable', 'Pretendard', -apple-system, sans-serif" }}
+    >
       <GlobalStyles />
       <BackgroundFX />
 
@@ -349,22 +605,19 @@ export default function App() {
             kind={pinFor}
             expected={pinFor === "admin" ? ADMIN_PIN : PLAYER_PIN}
             onSuccess={() => handlePinSuccess(pinFor)}
+            onTest={handleTestAccess}
             onBack={() => setRoute("splash")}
           />
         )}
-        {route === "name" && (
-          <NameEntryScreen
-            onSubmit={handleNameSubmit}
-            onBack={handleLeave}
-            myId={myId}
-          />
-        )}
+        {route === "name" && <NameEntryScreen onSubmit={handleNameSubmit} onBack={handleLeave} />}
+        {route === "test" && <TestLab onExit={() => setRoute("splash")} />}
         {route === "game" && authedAs === "player" && (
           <PlayerScreen
             myId={myId}
             myName={myName}
             myRole={myRole}
             gameState={gameState}
+            gameConfig={gameConfig}
             players={players}
             chat={chat}
             roles={roles}
@@ -377,14 +630,16 @@ export default function App() {
         {route === "admin" && authedAs === "admin" && (
           <AdminScreen
             myId={myId}
-            myName={myName}
             gameState={gameState}
+            gameConfig={gameConfig}
             players={players}
             roles={roles}
             chat={chat}
             votes={votes}
+            onSaveConfig={handleSaveConfig}
             onStart={handleStartGame}
             onAdvance={handleAdvanceRound}
+            onRestartTimer={handleRestartTimer}
             onEndVoting={handleEndVoting}
             onReset={handleResetGame}
             onSendChat={handleSendChat}
@@ -396,6 +651,7 @@ export default function App() {
   );
 }
 
+// ===================== CORE UI =====================
 function StorageStatus() {
   const meta = window.storage?.meta || {};
   if (meta.firebaseReady) {
@@ -412,113 +668,75 @@ function StorageStatus() {
   );
 }
 
-// ===================== GLOBAL STYLES =====================
 function GlobalStyles() {
   return (
     <style>{`
       @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.css');
       @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&display=swap');
-
       .font-mono { font-family: 'JetBrains Mono', monospace !important; }
-
-      @keyframes scan {
-        0% { transform: translateY(-100%); }
-        100% { transform: translateY(100vh); }
-      }
-      @keyframes pulse-glow {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(0, 255, 200, 0.4); }
-        50% { box-shadow: 0 0 30px 4px rgba(0, 255, 200, 0.15); }
-      }
-      @keyframes danger-glow {
-        0%, 100% { box-shadow: 0 0 0 0 rgba(255, 40, 85, 0.4); }
-        50% { box-shadow: 0 0 30px 4px rgba(255, 40, 85, 0.2); }
-      }
-      @keyframes blink {
-        0%, 49% { opacity: 1; }
-        50%, 100% { opacity: 0; }
-      }
-      @keyframes fadeUp {
-        from { opacity: 0; transform: translateY(12px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      @keyframes scaleIn {
-        from { opacity: 0; transform: scale(0.92); }
-        to { opacity: 1; transform: scale(1); }
-      }
-      @keyframes glitch {
-        0%, 100% { transform: translate(0); filter: hue-rotate(0deg); }
-        10% { transform: translate(-1px, 1px); filter: hue-rotate(20deg); }
-        20% { transform: translate(1px, -1px); }
-        30% { transform: translate(-1px, -1px); filter: hue-rotate(-20deg); }
-        40% { transform: translate(1px, 1px); }
-      }
-
-      .anim-fade-up { animation: fadeUp 0.5s ease-out forwards; opacity: 0; }
-      .anim-fade-in { animation: fadeIn 0.6s ease-out forwards; }
-      .anim-scale-in { animation: scaleIn 0.4s ease-out forwards; }
-      .anim-glitch { animation: glitch 0.3s ease-in-out; }
+      @keyframes pulse-glow { 0%,100% { box-shadow: 0 0 0 0 rgba(0,255,200,.35); } 50% { box-shadow: 0 0 30px 4px rgba(0,255,200,.14); } }
+      @keyframes danger-glow { 0%,100% { box-shadow: 0 0 0 0 rgba(255,40,85,.35); } 50% { box-shadow: 0 0 30px 4px rgba(255,40,85,.18); } }
+      @keyframes blink { 0%,49% { opacity: 1; } 50%,100% { opacity: .25; } }
+      @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes scaleIn { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1); } }
+      @keyframes glitch { 0%,100% { transform: translate(0); } 20% { transform: translate(1px,-1px); } 40% { transform: translate(-1px,1px); } }
+      .anim-fade-up { animation: fadeUp .5s ease-out forwards; opacity: 0; }
+      .anim-fade-in { animation: fadeIn .5s ease-out forwards; }
+      .anim-scale-in { animation: scaleIn .35s ease-out forwards; }
       .anim-pulse-glow { animation: pulse-glow 2.5s ease-in-out infinite; }
       .anim-danger-glow { animation: danger-glow 2s ease-in-out infinite; }
       .anim-blink { animation: blink 1s steps(2) infinite; }
-
-      .stagger > *:nth-child(1) { animation-delay: 0.05s; }
-      .stagger > *:nth-child(2) { animation-delay: 0.12s; }
-      .stagger > *:nth-child(3) { animation-delay: 0.20s; }
-      .stagger > *:nth-child(4) { animation-delay: 0.28s; }
-      .stagger > *:nth-child(5) { animation-delay: 0.36s; }
-      .stagger > *:nth-child(6) { animation-delay: 0.44s; }
-      .stagger > *:nth-child(7) { animation-delay: 0.52s; }
-      .stagger > *:nth-child(8) { animation-delay: 0.60s; }
-
+      .anim-glitch { animation: glitch .3s ease-in-out; }
+      .stagger > *:nth-child(1) { animation-delay: .05s; }
+      .stagger > *:nth-child(2) { animation-delay: .12s; }
+      .stagger > *:nth-child(3) { animation-delay: .19s; }
+      .stagger > *:nth-child(4) { animation-delay: .26s; }
+      .stagger > *:nth-child(5) { animation-delay: .33s; }
+      .stagger > *:nth-child(6) { animation-delay: .40s; }
       .scrollbar-thin::-webkit-scrollbar { width: 4px; }
       .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
-      .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
-
-      input[type="number"]::-webkit-inner-spin-button,
-      input[type="number"]::-webkit-outer-spin-button {
-        -webkit-appearance: none;
-        margin: 0;
-      }
-      input { -webkit-tap-highlight-color: transparent; }
-      button { -webkit-tap-highlight-color: transparent; }
+      .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 2px; }
+      input, button { -webkit-tap-highlight-color: transparent; }
     `}</style>
   );
 }
 
-// ===================== BACKGROUND FX =====================
 function BackgroundFX() {
   return (
     <>
-      <div className="fixed inset-0 opacity-[0.04] pointer-events-none" style={{
-        backgroundImage: `
-          linear-gradient(rgba(0,255,200,0.5) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(0,255,200,0.5) 1px, transparent 1px)
-        `,
-        backgroundSize: "40px 40px",
-      }} />
-      <div className="fixed inset-0 pointer-events-none" style={{
-        background: "radial-gradient(circle at 50% 30%, transparent 0%, rgba(0,0,0,0.6) 100%)",
-      }} />
-      <div className="fixed top-0 left-0 w-[60vw] h-[60vw] rounded-full pointer-events-none opacity-[0.08]" style={{
-        background: "radial-gradient(circle, rgba(0,255,200,1) 0%, transparent 70%)",
-        transform: "translate(-30%, -30%)",
-      }} />
-      <div className="fixed bottom-0 right-0 w-[60vw] h-[60vw] rounded-full pointer-events-none opacity-[0.06]" style={{
-        background: "radial-gradient(circle, rgba(255,40,85,1) 0%, transparent 70%)",
-        transform: "translate(30%, 30%)",
-      }} />
-      <div className="fixed inset-0 pointer-events-none opacity-[0.025] mix-blend-overlay" style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`,
-      }} />
+      <div
+        className="fixed inset-0 opacity-[0.04] pointer-events-none"
+        style={{
+          backgroundImage: `
+            linear-gradient(rgba(0,255,200,0.5) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0,255,200,0.5) 1px, transparent 1px)
+          `,
+          backgroundSize: "40px 40px",
+        }}
+      />
+      <div
+        className="fixed inset-0 pointer-events-none"
+        style={{ background: "radial-gradient(circle at 50% 30%, transparent 0%, rgba(0,0,0,.72) 100%)" }}
+      />
+      <div
+        className="fixed top-0 left-0 w-[60vw] h-[60vw] rounded-full pointer-events-none opacity-[0.08]"
+        style={{
+          background: "radial-gradient(circle, rgba(0,255,200,1) 0%, transparent 70%)",
+          transform: "translate(-30%, -30%)",
+        }}
+      />
+      <div
+        className="fixed bottom-0 right-0 w-[60vw] h-[60vw] rounded-full pointer-events-none opacity-[0.06]"
+        style={{
+          background: "radial-gradient(circle, rgba(255,40,85,1) 0%, transparent 70%)",
+          transform: "translate(30%, 30%)",
+        }}
+      />
     </>
   );
 }
 
-// ===================== LOADING =====================
 function LoadingScreen() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6">
@@ -528,129 +746,113 @@ function LoadingScreen() {
   );
 }
 
-// ===================== SPLASH =====================
 function SplashScreen({ onPick }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-10">
       <div className="max-w-sm w-full stagger">
-        <div className="text-center mb-12 anim-fade-up">
+        <div className="text-center mb-10 anim-fade-up">
           <div className="inline-flex items-center gap-2 px-3 py-1 border border-cyan-400/30 mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 anim-blink" />
             <span className="font-mono text-[10px] text-cyan-400/80 tracking-[0.3em]">SECURE CHANNEL</span>
           </div>
-
-          <h1 className="font-mono text-5xl font-extrabold tracking-tighter mb-3" style={{
-            background: "linear-gradient(180deg, #ffffff 0%, #00ffd5 70%, #00ffd5 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            letterSpacing: "-0.04em",
-          }}>
-            DEEP<br/>NETWORK
+          <h1
+            className="font-mono text-5xl font-extrabold mb-3"
+            style={{
+              background: "linear-gradient(180deg, #ffffff 0%, #00ffd5 72%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              letterSpacing: "-0.04em",
+            }}
+          >
+            DEEP<br />NETWORK
           </h1>
-
           <div className="flex items-center justify-center gap-2 my-4">
             <div className="h-px flex-1 bg-gradient-to-r from-transparent to-cyan-500/40" />
             <Skull className="w-3 h-3 text-cyan-400/60" />
             <div className="h-px flex-1 bg-gradient-to-l from-transparent to-cyan-500/40" />
           </div>
-
-          <p className="font-mono text-xs text-cyan-300/70 tracking-[0.2em] mb-1">잠입자 색출 작전</p>
-          <p className="text-white/40 text-[11px] italic">Find the moles. Save the network.</p>
+          <p className="font-mono text-xs text-cyan-300/70 tracking-[0.2em]">마피아 색출 작전</p>
         </div>
 
-        <div className="border border-white/10 bg-white/[0.02] backdrop-blur p-5 mb-8 anim-fade-up relative">
-          <div className="absolute top-0 left-0 w-3 h-3 border-t border-l border-cyan-400/60" />
-          <div className="absolute top-0 right-0 w-3 h-3 border-t border-r border-cyan-400/60" />
-          <div className="absolute bottom-0 left-0 w-3 h-3 border-b border-l border-cyan-400/60" />
-          <div className="absolute bottom-0 right-0 w-3 h-3 border-b border-r border-cyan-400/60" />
-
-          <div className="font-mono text-[10px] text-cyan-400/70 tracking-[0.25em] mb-3">// MISSION_BRIEF</div>
+        <div className="border border-white/10 bg-white/[0.02] backdrop-blur p-5 mb-6 anim-fade-up relative">
+          <div className="font-mono text-[10px] text-cyan-400/70 tracking-[0.25em] mb-3">// GAME_BRIEF</div>
           <ul className="text-sm text-white/85 space-y-2 leading-relaxed">
-            <li className="flex gap-2"><span className="text-cyan-400">›</span>플레이어 6명, 운영자 1명</li>
-            <li className="flex gap-2"><span className="text-cyan-400">›</span>각자 자신의 단말기에서 접속</li>
-            <li className="flex gap-2"><span className="text-cyan-400">›</span>시민 4명 vs 잠입자 2명</li>
-            <li className="flex gap-2"><span className="text-rose-400">›</span>잠입자는 비밀 채널로 채팅 가능</li>
-            <li className="flex gap-2"><span className="text-cyan-400">›</span>4라운드 토론 후 비밀 투표</li>
+            <li className="flex gap-2"><span className="text-cyan-400">›</span>마스터가 총 인원, 마피아 수, 직업 수를 설정</li>
+            <li className="flex gap-2"><span className="text-cyan-400">›</span>각자 자신의 휴대폰에서 접속</li>
+            <li className="flex gap-2"><span className="text-cyan-400">›</span>경찰, 의사, 보디가드, 영매, 스파이 지원</li>
+            <li className="flex gap-2"><span className="text-rose-400">›</span>마피아 팀은 비밀 채팅 가능</li>
+            <li className="flex gap-2"><span className="text-amber-300">›</span>테스트 PIN: 0000</li>
           </ul>
         </div>
 
-        <button
-          onClick={() => onPick("player")}
-          className="w-full mb-3 group relative overflow-hidden border border-cyan-400/40 bg-gradient-to-br from-cyan-950/30 to-transparent hover:from-cyan-900/40 transition-all anim-fade-up"
-        >
-          <div className="px-6 py-5 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 border border-cyan-400/50 flex items-center justify-center">
-                <User className="w-5 h-5 text-cyan-300" />
-              </div>
-              <div className="text-left">
-                <div className="font-mono text-[10px] text-cyan-400/70 tracking-[0.25em]">PLAYER ACCESS</div>
-                <div className="text-white font-semibold">플레이어 입장</div>
-              </div>
-            </div>
-            <ChevronRight className="w-5 h-5 text-cyan-400 group-hover:translate-x-1 transition-transform" />
-          </div>
-        </button>
-
-        <button
-          onClick={() => onPick("admin")}
-          className="w-full group relative overflow-hidden border border-amber-500/40 bg-gradient-to-br from-amber-950/30 to-transparent hover:from-amber-900/40 transition-all anim-fade-up"
-        >
-          <div className="px-6 py-5 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 border border-amber-500/50 flex items-center justify-center">
-                <Shield className="w-5 h-5 text-amber-300" />
-              </div>
-              <div className="text-left">
-                <div className="font-mono text-[10px] text-amber-400/70 tracking-[0.25em]">ADMIN ACCESS</div>
-                <div className="text-white font-semibold">운영자 입장</div>
-              </div>
-            </div>
-            <ChevronRight className="w-5 h-5 text-amber-400 group-hover:translate-x-1 transition-transform" />
-          </div>
-        </button>
+        <AccessButton tone="cyan" icon={User} title="플레이어 입장" label="PLAYER ACCESS" onClick={() => onPick("player")} />
+        <AccessButton tone="amber" icon={Shield} title="마스터 입장" label="MASTER ACCESS" onClick={() => onPick("admin")} />
 
         <p className="text-center text-white/30 text-[10px] mt-8 font-mono tracking-wider anim-fade-up">
-          v1.0 · 6 DEVICES REQUIRED
+          PLAYER 1004 · MASTER 4001 · TEST 0000
         </p>
       </div>
     </div>
   );
 }
 
-// ===================== PIN ENTRY =====================
-function PinScreen({ kind, expected, onSuccess, onBack }) {
+function AccessButton({ tone, icon: Icon, title, label, onClick }) {
+  const classes =
+    tone === "amber"
+      ? "border-amber-500/40 from-amber-950/30 hover:from-amber-900/40 text-amber-300"
+      : "border-cyan-400/40 from-cyan-950/30 hover:from-cyan-900/40 text-cyan-300";
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full mb-3 group relative overflow-hidden border bg-gradient-to-br to-transparent transition-all anim-fade-up ${classes}`}
+    >
+      <div className="px-6 py-5 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 border border-current/50 flex items-center justify-center">
+            <Icon className="w-5 h-5" />
+          </div>
+          <div className="text-left">
+            <div className="font-mono text-[10px] opacity-70 tracking-[0.25em]">{label}</div>
+            <div className="text-white font-semibold">{title}</div>
+          </div>
+        </div>
+        <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+      </div>
+    </button>
+  );
+}
+
+function PinScreen({ kind, expected, onSuccess, onTest, onBack }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState(false);
   const [shake, setShake] = useState(false);
   const isAdmin = kind === "admin";
-
-  const labelClass = isAdmin ? "text-amber-400/70" : "text-cyan-400/70";
-  const titleClass = isAdmin ? "text-amber-300" : "text-cyan-300";
-  const dotBorderClass = isAdmin ? "border-amber-400" : "border-cyan-400";
-  const dotFillClass = isAdmin ? "bg-amber-400" : "bg-cyan-400";
-  const numBtnClass = isAdmin
-    ? "hover:border-amber-400/60 hover:bg-amber-400/5"
-    : "hover:border-cyan-400/60 hover:bg-cyan-400/5";
+  const tone = isAdmin ? "amber" : "cyan";
 
   useEffect(() => {
-    if (pin.length === 4) {
-      if (pin === expected) {
-        setTimeout(() => onSuccess(), 250);
-      } else {
-        setError(true);
-        setShake(true);
-        setTimeout(() => { setPin(""); setShake(false); }, 600);
-      }
-    } else {
+    if (pin.length !== 4) {
       setError(false);
+      return;
     }
-  }, [pin, expected, onSuccess]);
+    if (pin === TEST_PIN) {
+      setTimeout(onTest, 180);
+      return;
+    }
+    if (pin === expected) {
+      setTimeout(onSuccess, 180);
+      return;
+    }
+    setError(true);
+    setShake(true);
+    setTimeout(() => {
+      setPin("");
+      setShake(false);
+    }, 600);
+  }, [pin, expected]);
 
   const press = (n) => {
     if (pin.length < 4) setPin(pin + n);
   };
-  const back = () => setPin(pin.slice(0, -1));
 
   return (
     <div className="min-h-screen flex flex-col px-6 py-8">
@@ -660,13 +862,13 @@ function PinScreen({ kind, expected, onSuccess, onBack }) {
       </button>
 
       <div className="flex-1 flex flex-col items-center justify-center max-w-xs w-full mx-auto">
-        <div className={`mb-2 font-mono text-[10px] tracking-[0.3em] ${labelClass}`}>
-          {isAdmin ? "ADMIN AUTHENTICATION" : "PLAYER AUTHENTICATION"}
+        <div className={`mb-2 font-mono text-[10px] tracking-[0.3em] ${tone === "amber" ? "text-amber-400/70" : "text-cyan-400/70"}`}>
+          {isAdmin ? "MASTER AUTHENTICATION" : "PLAYER AUTHENTICATION"}
         </div>
-        <div className={`${titleClass} text-lg font-semibold mb-1`}>
-          {isAdmin ? "운영자 인증" : "플레이어 인증"}
+        <div className={`${tone === "amber" ? "text-amber-300" : "text-cyan-300"} text-lg font-semibold mb-1`}>
+          {isAdmin ? "마스터 인증" : "플레이어 인증"}
         </div>
-        <div className="text-white/40 text-xs mb-10">4자리 보안 코드를 입력하세요</div>
+        <div className="text-white/40 text-xs mb-10">4자리 코드를 입력하세요. 테스트는 0000입니다.</div>
 
         <div className={`flex gap-4 mb-12 ${shake ? "anim-glitch" : ""}`}>
           {[0, 1, 2, 3].map((i) => (
@@ -676,12 +878,14 @@ function PinScreen({ kind, expected, onSuccess, onBack }) {
                 error
                   ? "border-rose-500"
                   : pin.length > i
-                  ? dotBorderClass
+                  ? tone === "amber"
+                    ? "border-amber-400"
+                    : "border-cyan-400"
                   : "border-white/20"
               }`}
             >
               {pin.length > i ? (
-                <div className={`w-3 h-3 rounded-full ${error ? "bg-rose-500" : dotFillClass}`} />
+                <div className={`w-3 h-3 rounded-full ${error ? "bg-rose-500" : tone === "amber" ? "bg-amber-400" : "bg-cyan-400"}`} />
               ) : (
                 <div className="w-1 h-1 rounded-full bg-white/20" />
               )}
@@ -689,18 +893,14 @@ function PinScreen({ kind, expected, onSuccess, onBack }) {
           ))}
         </div>
 
-        {error && (
-          <div className="text-rose-400 text-xs font-mono tracking-wider mb-6 anim-fade-in">
-            ⚠ ACCESS DENIED · 잘못된 코드
-          </div>
-        )}
+        {error && <div className="text-rose-400 text-xs font-mono tracking-wider mb-6 anim-fade-in">ACCESS DENIED · 잘못된 코드</div>}
 
         <div className="grid grid-cols-3 gap-3 w-full">
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
             <button
               key={n}
               onClick={() => press(n)}
-              className={`aspect-square border border-white/10 ${numBtnClass} transition-all text-2xl font-mono font-light text-white/90 active:scale-95`}
+              className="aspect-square border border-white/10 hover:border-cyan-400/60 hover:bg-cyan-400/5 transition-all text-2xl font-mono font-light text-white/90 active:scale-95"
             >
               {n}
             </button>
@@ -708,27 +908,22 @@ function PinScreen({ kind, expected, onSuccess, onBack }) {
           <div />
           <button
             onClick={() => press(0)}
-            className={`aspect-square border border-white/10 ${numBtnClass} transition-all text-2xl font-mono font-light text-white/90 active:scale-95`}
+            className="aspect-square border border-white/10 hover:border-cyan-400/60 hover:bg-cyan-400/5 transition-all text-2xl font-mono font-light text-white/90 active:scale-95"
           >
             0
           </button>
           <button
-            onClick={back}
+            onClick={() => setPin(pin.slice(0, -1))}
             className="aspect-square border border-white/10 hover:border-rose-400/60 hover:bg-rose-400/5 transition-all flex items-center justify-center text-white/70 active:scale-95"
           >
             <Delete className="w-5 h-5" />
           </button>
-        </div>
-
-        <div className="mt-8 font-mono text-[10px] text-white/30 text-center">
-          {isAdmin ? "// ADMIN_KEY: 4-digit code" : "// PLAYER_KEY: 4-digit code"}
         </div>
       </div>
     </div>
   );
 }
 
-// ===================== NAME ENTRY =====================
 function NameEntryScreen({ onSubmit, onBack }) {
   const [name, setName] = useState("");
   const [err, setErr] = useState("");
@@ -751,14 +946,17 @@ function NameEntryScreen({ onSubmit, onBack }) {
       <div className="flex-1 flex flex-col justify-center max-w-sm w-full mx-auto">
         <div className="font-mono text-[10px] text-cyan-400/70 tracking-[0.3em] mb-2">// IDENTITY_REGISTRATION</div>
         <h2 className="text-2xl font-bold text-white mb-2">신원 등록</h2>
-        <p className="text-white/50 text-sm mb-10">다른 플레이어들에게 표시될 이름을 입력하세요.</p>
+        <p className="text-white/50 text-sm mb-10">다른 플레이어에게 표시될 이름을 입력하세요.</p>
 
         <div className="relative mb-2">
           <Fingerprint className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-cyan-400/60" />
           <input
             type="text"
             value={name}
-            onChange={(e) => { setName(e.target.value); setErr(""); }}
+            onChange={(e) => {
+              setName(e.target.value);
+              setErr("");
+            }}
             onKeyDown={(e) => e.key === "Enter" && submit()}
             placeholder="이름 또는 닉네임"
             maxLength={12}
@@ -767,38 +965,58 @@ function NameEntryScreen({ onSubmit, onBack }) {
           />
         </div>
 
-        {err && <p className="text-rose-400 text-xs mb-4 font-mono">⚠ {err}</p>}
-        {!err && <p className="text-white/30 text-xs mb-4 font-mono">// MAX 12 chars</p>}
+        {err ? <p className="text-rose-400 text-xs mb-4 font-mono">{err}</p> : <p className="text-white/30 text-xs mb-4 font-mono">// MAX 12 chars</p>}
 
         <button
           onClick={submit}
           disabled={!name.trim() || busy}
           className={`w-full py-4 mt-4 transition-all font-medium ${
-            name.trim() && !busy
-              ? "bg-cyan-400 text-black hover:bg-cyan-300"
-              : "bg-white/5 text-white/30 cursor-not-allowed"
+            name.trim() && !busy ? "bg-cyan-400 text-black hover:bg-cyan-300" : "bg-white/5 text-white/30 cursor-not-allowed"
           }`}
         >
-          {busy ? "접속 중..." : "네트워크 진입 →"}
+          {busy ? "접속 중..." : "게임 입장"}
         </button>
       </div>
     </div>
   );
 }
 
-// ===================== PLAYER SCREEN =====================
-function PlayerScreen({ myId, myName, myRole, gameState, players, chat, roles, votes, onSendChat, onSubmitVote, onLeave }) {
-  const phase = gameState?.phase || "lobby";
+// ===================== TIMER =====================
+function Countdown({ endsAt, compact = false }) {
+  const [now, setNow] = useState(Date.now());
 
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (!endsAt) return null;
+  const remaining = Math.max(0, Math.ceil((endsAt - now) / 1000));
+  const expired = remaining <= 0;
+
+  return (
+    <div
+      className={`inline-flex items-center gap-2 border ${
+        expired ? "border-rose-500/50 text-rose-300 bg-rose-500/10" : "border-cyan-400/40 text-cyan-300 bg-cyan-400/10"
+      } ${compact ? "px-2 py-1 text-[10px]" : "px-4 py-2 text-sm"} font-mono tracking-wider`}
+    >
+      <Clock className={compact ? "w-3 h-3" : "w-4 h-4"} />
+      {expired ? "TIME OUT" : formatTime(remaining)}
+    </div>
+  );
+}
+
+// ===================== PLAYER SCREEN =====================
+function PlayerScreen({ myId, myName, myRole, gameState, gameConfig, players, chat, roles, votes, onSendChat, onSubmitVote, onLeave }) {
+  const phase = gameState?.phase || "lobby";
   return (
     <div className="min-h-screen flex flex-col">
       <PlayerHeader myName={myName} myRole={myRole} phase={phase} onLeave={onLeave} />
-
-      {phase === "lobby" && <PlayerLobby players={players} myId={myId} />}
+      {phase === "lobby" && <PlayerLobby players={players} myId={myId} gameConfig={gameConfig} />}
       {phase === "playing" && (
         <PlayerGame
           round={gameState.round}
-          gameStartedAt={gameState.startedAt}
+          gameState={gameState}
           myId={myId}
           myName={myName}
           myRole={myRole}
@@ -812,30 +1030,29 @@ function PlayerScreen({ myId, myName, myRole, gameState, players, chat, roles, v
           myId={myId}
           myName={myName}
           myRole={myRole}
+          gameState={gameState}
+          gameConfig={gameConfig}
           players={players}
+          roles={roles}
           chat={chat}
           votes={votes}
           onSendChat={onSendChat}
           onSubmitVote={onSubmitVote}
         />
       )}
-      {phase === "results" && (
-        <ResultsView myId={myId} players={players} roles={roles} votes={votes} isAdmin={false} />
-      )}
+      {phase === "results" && <ResultsView myId={myId} players={players} roles={roles} votes={votes} gameConfig={gameConfig} isAdmin={false} />}
     </div>
   );
 }
 
 function PlayerHeader({ myName, myRole, phase, onLeave }) {
-  const isKiller = myRole === "killer";
+  const def = getRoleDef(myRole);
+  const Icon = def.icon;
   const showRole = phase !== "lobby" && myRole;
-
   return (
-    <header className="border-b border-white/10 px-4 py-3 flex items-center justify-between bg-black/40 backdrop-blur sticky top-0 z-20">
+    <header className="border-b border-white/10 px-4 py-3 flex items-center justify-between bg-black/50 backdrop-blur sticky top-0 z-20">
       <div className="flex items-center gap-3">
-        <div className="relative">
-          <div className={`w-2 h-2 rounded-full ${isKiller && showRole ? "bg-rose-400" : "bg-cyan-400"} anim-blink`} />
-        </div>
+        <div className={`w-2 h-2 rounded-full ${def.team === "mafia" && showRole ? "bg-rose-400" : "bg-cyan-400"} anim-blink`} />
         <div>
           <div className="font-mono text-[10px] text-white/40 tracking-wider">YOU</div>
           <div className="text-white text-sm font-semibold">{myName}</div>
@@ -844,10 +1061,9 @@ function PlayerHeader({ myName, myRole, phase, onLeave }) {
 
       <div className="flex items-center gap-3">
         {showRole && (
-          <div className={`px-2.5 py-1 border text-[10px] font-mono font-bold tracking-[0.2em] ${
-            isKiller ? "border-rose-500/60 text-rose-300 bg-rose-500/10" : "border-cyan-400/60 text-cyan-300 bg-cyan-400/10"
-          }`}>
-            {isKiller ? "INFILTRATOR" : "CITIZEN"}
+          <div className={`px-2.5 py-1 border text-[10px] font-mono font-bold tracking-[0.16em] flex items-center gap-1.5 ${roleToneClasses(myRole)}`}>
+            <Icon className="w-3 h-3" />
+            {def.code}
           </div>
         )}
         <button onClick={onLeave} className="text-white/40 hover:text-white/80 transition">
@@ -858,24 +1074,23 @@ function PlayerHeader({ myName, myRole, phase, onLeave }) {
   );
 }
 
-function PlayerLobby({ players, myId }) {
-  const remaining = TOTAL_PLAYERS - players.length;
+function PlayerLobby({ players, myId, gameConfig }) {
+  const cfg = normalizeConfig(gameConfig);
+  const remaining = cfg.totalPlayers - players.length;
   return (
     <div className="flex-1 px-5 py-8">
       <div className="max-w-md mx-auto">
         <div className="text-center mb-8 anim-fade-up">
-          <div className="font-mono text-[10px] text-cyan-400/70 tracking-[0.3em] mb-2">// AWAITING_OPERATIVES</div>
+          <div className="font-mono text-[10px] text-cyan-400/70 tracking-[0.3em] mb-2">// AWAITING_PLAYERS</div>
           <h2 className="text-2xl font-bold text-white mb-2">접속 대기실</h2>
           <p className="text-white/50 text-sm">
-            {remaining > 0
-              ? `${remaining}명이 더 접속하면 운영자가 시작합니다`
-              : "모든 인원 접속 완료. 운영자의 시작을 기다리는 중..."}
+            {remaining > 0 ? `${remaining}명이 더 접속하면 마스터가 시작합니다` : "모든 인원 접속 완료. 마스터의 시작을 기다리는 중..."}
           </p>
         </div>
 
         <div className="border border-white/10 bg-white/[0.02] overflow-hidden mb-6 anim-fade-up">
           <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-            <span className="font-mono text-[10px] text-white/50 tracking-[0.2em]">CONNECTED ({players.length}/{TOTAL_PLAYERS})</span>
+            <span className="font-mono text-[10px] text-white/50 tracking-[0.2em]">CONNECTED ({players.length}/{cfg.totalPlayers})</span>
             <Activity className="w-3 h-3 text-cyan-400 anim-blink" />
           </div>
           <div className="divide-y divide-white/5 stagger">
@@ -890,12 +1105,10 @@ function PlayerLobby({ players, myId }) {
                     <div className="font-mono text-[10px] text-white/30">ID:{shortId(p.id)} · {timeAgo(p.joinedAt)}</div>
                   </div>
                 </div>
-                {p.id === myId && (
-                  <span className="font-mono text-[10px] text-cyan-400 tracking-wider">YOU</span>
-                )}
+                {p.id === myId && <span className="font-mono text-[10px] text-cyan-400 tracking-wider">YOU</span>}
               </div>
             ))}
-            {Array.from({ length: Math.max(0, TOTAL_PLAYERS - players.length) }).map((_, i) => (
+            {Array.from({ length: Math.max(0, cfg.totalPlayers - players.length) }).map((_, i) => (
               <div key={`e${i}`} className="px-4 py-3 flex items-center gap-3 opacity-30">
                 <div className="w-8 h-8 rounded-full border border-dashed border-white/20" />
                 <div className="font-mono text-xs text-white/30">awaiting connection...</div>
@@ -904,78 +1117,62 @@ function PlayerLobby({ players, myId }) {
           </div>
         </div>
 
-        <div className="text-center text-white/30 font-mono text-[10px] tracking-wider">
-          DEEP_NETWORK :: STANDBY
-        </div>
+        <RoleSummary config={cfg} />
       </div>
     </div>
   );
 }
 
-function PlayerGame({ round, gameStartedAt, myId, myName, myRole, players, chat, onSendChat }) {
-  const r = ROUNDS[round];
-  const isKiller = myRole === "killer";
+function PlayerGame({ round, gameState, myId, myName, myRole, players, chat, onSendChat }) {
+  const r = ROUNDS[round] || ROUNDS[1];
+  const def = getRoleDef(myRole);
+  const isMafiaTeam = def.team === "mafia";
   const [showRoleReveal, setShowRoleReveal] = useState(false);
   const checkedRef = useRef(null);
 
   useEffect(() => {
-    if (round !== 1 || !gameStartedAt) return;
-    if (checkedRef.current === gameStartedAt) return;
-    checkedRef.current = gameStartedAt;
-
+    if (round !== 1 || !gameState.startedAt) return;
+    if (checkedRef.current === gameState.startedAt) return;
+    checkedRef.current = gameState.startedAt;
     (async () => {
       const lastSeen = await getKey("dn_last_reveal", false);
-      if (lastSeen !== gameStartedAt) {
+      if (lastSeen !== gameState.startedAt) {
         setShowRoleReveal(true);
-        await setKey("dn_last_reveal", gameStartedAt, false);
+        await setKey("dn_last_reveal", gameState.startedAt, false);
       }
     })();
-  }, [round, gameStartedAt]);
+  }, [round, gameState.startedAt]);
 
   if (showRoleReveal) {
-    return <RoleRevealOverlay isKiller={isKiller} onClose={() => setShowRoleReveal(false)} myName={myName} />;
+    return <RoleRevealOverlay role={myRole} onClose={() => setShowRoleReveal(false)} myName={myName} />;
   }
-
-  if (!r) return null;
 
   return (
     <div className="flex-1 flex flex-col">
       <div className="px-5 py-6 max-w-md w-full mx-auto flex-1">
         <div className="flex items-center justify-between mb-5 anim-fade-up">
           <div className="font-mono text-[10px] text-white/50 tracking-[0.25em]">
-            {r.label} · {r.duration}
+            {r.label} · {round}/{TOTAL_ROUNDS}
           </div>
-          <div className="flex gap-1">
-            {[1, 2, 3, 4].map(i => (
-              <div key={i} className={`h-1 w-6 ${
-                i < round ? "bg-cyan-400" : i === round ? "bg-cyan-400 anim-blink" : "bg-white/15"
-              }`} />
-            ))}
-          </div>
+          <Countdown endsAt={gameState.roundEndsAt} compact />
         </div>
 
         <div className="border border-cyan-400/20 bg-gradient-to-b from-cyan-400/[0.03] to-transparent p-6 mb-5 relative anim-scale-in">
-          <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-cyan-400/60" />
-          <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-cyan-400/60" />
-          <div className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-cyan-400/60" />
-          <div className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-cyan-400/60" />
-
+          <Corner tone="cyan" />
           <div className="font-mono text-[10px] text-cyan-400/70 tracking-[0.2em] mb-3">{r.code}</div>
           <h2 className="text-3xl font-bold text-white mb-5 tracking-tight">{r.title}</h2>
-
           <div className="space-y-2 text-white/85 leading-relaxed text-[15px] mb-6">
             {r.text.map((line, i) => (
-              <p key={i} className={line.startsWith("「") || line.includes("「") ? "italic text-cyan-200/90 pl-3 border-l-2 border-cyan-400/40" : ""}>
-                {line}
-              </p>
+              <p key={i}>{line}</p>
             ))}
           </div>
-
           <div className="flex items-start gap-2 pt-4 border-t border-white/10">
             <Crosshair className="w-4 h-4 text-cyan-400 mt-0.5 flex-shrink-0" />
             <p className="text-cyan-300 text-sm font-medium">{r.instruction}</p>
           </div>
         </div>
+
+        <RoleAbilityPanel role={myRole} players={players} myId={myId} />
 
         <details className="mb-5 anim-fade-up">
           <summary className="cursor-pointer flex items-center justify-between border border-white/10 px-4 py-3 hover:bg-white/[0.03]">
@@ -993,25 +1190,63 @@ function PlayerGame({ round, gameStartedAt, myId, myName, myRole, players, chat,
         </details>
 
         <div className="text-center text-white/30 font-mono text-[10px] tracking-wider">
-          운영자가 다음 라운드를 진행합니다...
+          마스터가 다음 라운드를 진행합니다...
         </div>
       </div>
 
-      {isKiller && (
-        <KillerChatPanel
-          chat={chat}
-          myId={myId}
-          myName={myName}
-          onSend={onSendChat}
-          isAdmin={false}
-        />
+      {isMafiaTeam && <KillerChatPanel chat={chat} myId={myId} myName={myName} onSend={onSendChat} isAdmin={false} />}
+    </div>
+  );
+}
+
+function RoleAbilityPanel({ role, players, myId }) {
+  const def = getRoleDef(role);
+  const Icon = def.icon;
+  const [target, setTarget] = useState("");
+  const selectable = players.filter((p) => p.id !== myId);
+
+  return (
+    <div className={`border p-4 mb-5 anim-fade-up ${roleToneClasses(role)}`}>
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 border border-current/40 flex items-center justify-center bg-black/20">
+          <Icon className="w-5 h-5" />
+        </div>
+        <div className="flex-1">
+          <div className="font-mono text-[10px] tracking-[0.25em] opacity-80 mb-1">{def.code} SCREEN</div>
+          <h3 className="text-lg font-bold text-white mb-1">{def.name}</h3>
+          <p className="text-sm text-white/75 leading-relaxed">{def.brief}</p>
+          <p className="text-xs text-white/50 leading-relaxed mt-2">{def.mission}</p>
+        </div>
+      </div>
+
+      {role !== "citizen" && (
+        <div className="mt-4 pt-4 border-t border-white/10">
+          <div className="font-mono text-[10px] text-white/45 tracking-[0.2em] mb-2">TARGET MEMO</div>
+          <div className="grid grid-cols-2 gap-2">
+            {selectable.slice(0, 8).map((p) => (
+              <button
+                key={p.id}
+                onClick={() => setTarget(p.id)}
+                className={`px-3 py-2 border text-left text-xs transition ${
+                  target === p.id ? "border-white/60 bg-white/10 text-white" : "border-white/10 bg-black/20 text-white/60"
+                }`}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-white/35">이 선택은 개인 메모용입니다. 실제 판정은 마스터가 진행하세요.</p>
+        </div>
       )}
     </div>
   );
 }
 
-function RoleRevealOverlay({ isKiller, onClose, myName }) {
+function RoleRevealOverlay({ role, onClose, myName }) {
   const [revealed, setRevealed] = useState(false);
+  const def = getRoleDef(role);
+  const Icon = def.icon;
+  const isMafiaTeam = def.team === "mafia";
 
   return (
     <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center px-6">
@@ -1020,91 +1255,38 @@ function RoleRevealOverlay({ isKiller, onClose, myName }) {
           <p className="font-mono text-[10px] text-cyan-400/70 tracking-[0.3em] mb-3">// ROLE_ASSIGNMENT</p>
           <h2 className="text-3xl font-bold text-white mb-2">{myName}</h2>
           <p className="text-white/50 text-sm mb-12">신원 카드가 준비되었습니다</p>
-
           <div className="border border-white/15 bg-white/[0.03] p-12 mb-8 relative">
-            <div className="absolute top-2 left-2 w-4 h-4 border-t border-l border-cyan-400/60" />
-            <div className="absolute top-2 right-2 w-4 h-4 border-t border-r border-cyan-400/60" />
-            <div className="absolute bottom-2 left-2 w-4 h-4 border-b border-l border-cyan-400/60" />
-            <div className="absolute bottom-2 right-2 w-4 h-4 border-b border-r border-cyan-400/60" />
-
+            <Corner tone="cyan" />
             <Lock className="w-12 h-12 text-cyan-400/70 mx-auto mb-4" />
             <p className="font-mono text-xs text-cyan-300 tracking-[0.3em]">CLASSIFIED</p>
           </div>
-
-          <p className="text-white/40 text-xs mb-6">⚠ 다른 사람이 화면을 볼 수 없는 곳에서 확인하세요</p>
-
-          <button
-            onClick={() => setRevealed(true)}
-            className="px-12 py-4 bg-cyan-400 text-black font-semibold hover:bg-cyan-300 transition-all"
-          >
+          <p className="text-white/40 text-xs mb-6">다른 사람이 화면을 볼 수 없는 곳에서 확인하세요</p>
+          <button onClick={() => setRevealed(true)} className="px-12 py-4 bg-cyan-400 text-black font-semibold hover:bg-cyan-300 transition-all">
             <Eye className="inline w-4 h-4 mr-2" />
             신원 확인
           </button>
         </div>
-      ) : isKiller ? (
-        <div className="text-center anim-scale-in max-w-sm w-full">
-          <p className="font-mono text-[10px] text-rose-400 tracking-[0.3em] mb-3 anim-blink">// CLASSIFIED // RED_TEAM</p>
-
-          <div className="border-2 border-rose-500/60 bg-gradient-to-b from-rose-950/40 to-black p-8 mb-6 relative anim-danger-glow">
-            <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-rose-500" />
-            <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-rose-500" />
-            <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-rose-500" />
-            <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-rose-500" />
-
-            <Skull className="w-16 h-16 text-rose-400 mx-auto mb-4 anim-glitch" />
-            <h2 className="text-3xl font-bold text-rose-300 mb-2 tracking-tight">잠입자</h2>
-            <p className="font-mono text-xs text-rose-400/80 tracking-[0.25em] mb-5">YOU ARE THE INFILTRATOR</p>
-
-            <div className="border-t border-rose-800/50 pt-4 text-left space-y-2 text-sm text-rose-100/85 leading-relaxed">
-              <p>당신은 <span className="font-bold text-rose-300">딥 네트워크</span>를 무너뜨리기 위해 잠입한 자입니다.</p>
-              <p>또 다른 잠입자가 한 명 더 있습니다. 곧 비밀 채팅으로 만날 수 있습니다.</p>
-              <p>시민들이 당신의 정체를 눈치채지 못하게 거짓말로 속여라.</p>
-            </div>
-          </div>
-
-          <div className="bg-rose-500/10 border border-rose-500/30 p-3 mb-6 text-left">
-            <div className="font-mono text-[10px] text-rose-400 tracking-wider mb-1">VICTORY CONDITION</div>
-            <p className="text-sm text-rose-100">투표에서 두 잠입자 중 한 명이라도 살아남으면 승리</p>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="w-full py-4 bg-rose-500 text-white font-semibold hover:bg-rose-400 transition"
-          >
-            임무 시작 →
-          </button>
-        </div>
       ) : (
         <div className="text-center anim-scale-in max-w-sm w-full">
-          <p className="font-mono text-[10px] text-cyan-400 tracking-[0.3em] mb-3">// VERIFIED // BLUE_TEAM</p>
-
-          <div className="border-2 border-cyan-400/60 bg-gradient-to-b from-cyan-950/30 to-black p-8 mb-6 relative anim-pulse-glow">
-            <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-cyan-400" />
-            <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-cyan-400" />
-            <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-cyan-400" />
-            <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-cyan-400" />
-
-            <UserCheck className="w-16 h-16 text-cyan-400 mx-auto mb-4" />
-            <h2 className="text-3xl font-bold text-cyan-300 mb-2 tracking-tight">시민</h2>
-            <p className="font-mono text-xs text-cyan-400/80 tracking-[0.25em] mb-5">YOU ARE A CITIZEN</p>
-
-            <div className="border-t border-cyan-800/50 pt-4 text-left space-y-2 text-sm text-cyan-100/85 leading-relaxed">
-              <p>당신은 <span className="font-bold text-cyan-300">딥 네트워크</span>의 정식 참가자입니다.</p>
-              <p>이 안의 6명 중 2명이 잠입자입니다.</p>
-              <p>대화와 추리로 잠입자 둘을 모두 색출하라.</p>
+          <p className={`font-mono text-[10px] tracking-[0.3em] mb-3 ${isMafiaTeam ? "text-rose-400" : "text-cyan-400"}`}>
+            // {isMafiaTeam ? "RED_TEAM" : "BLUE_TEAM"}
+          </p>
+          <div className={`border-2 p-8 mb-6 relative ${isMafiaTeam ? "border-rose-500/60 bg-rose-950/30 anim-danger-glow" : "border-cyan-400/60 bg-cyan-950/20 anim-pulse-glow"}`}>
+            <Corner tone={isMafiaTeam ? "rose" : "cyan"} thick />
+            <Icon className={`w-16 h-16 mx-auto mb-4 ${isMafiaTeam ? "text-rose-400" : "text-cyan-400"}`} />
+            <h2 className={`text-3xl font-bold mb-2 tracking-tight ${isMafiaTeam ? "text-rose-300" : "text-cyan-300"}`}>{def.name}</h2>
+            <p className={`font-mono text-xs tracking-[0.25em] mb-5 ${isMafiaTeam ? "text-rose-400/80" : "text-cyan-400/80"}`}>{def.code}</p>
+            <div className="border-t border-white/10 pt-4 text-left space-y-2 text-sm text-white/85 leading-relaxed">
+              <p>{def.brief}</p>
+              <p>{def.mission}</p>
             </div>
           </div>
-
-          <div className="bg-cyan-500/10 border border-cyan-500/30 p-3 mb-6 text-left">
-            <div className="font-mono text-[10px] text-cyan-400 tracking-wider mb-1">VICTORY CONDITION</div>
-            <p className="text-sm text-cyan-100">투표에서 두 잠입자를 모두 정확히 지목하면 승리</p>
+          <div className={`border p-3 mb-6 text-left ${isMafiaTeam ? "border-rose-500/30 bg-rose-500/10" : "border-cyan-500/30 bg-cyan-500/10"}`}>
+            <div className={`font-mono text-[10px] tracking-wider mb-1 ${isMafiaTeam ? "text-rose-400" : "text-cyan-400"}`}>VICTORY CONDITION</div>
+            <p className="text-sm text-white/85">{def.win}</p>
           </div>
-
-          <button
-            onClick={onClose}
-            className="w-full py-4 bg-cyan-400 text-black font-semibold hover:bg-cyan-300 transition"
-          >
-            작전 시작 →
+          <button onClick={onClose} className={`w-full py-4 font-semibold transition ${isMafiaTeam ? "bg-rose-500 text-white hover:bg-rose-400" : "bg-cyan-400 text-black hover:bg-cyan-300"}`}>
+            게임 시작
           </button>
         </div>
       )}
@@ -1112,7 +1294,6 @@ function RoleRevealOverlay({ isKiller, onClose, myName }) {
   );
 }
 
-// ===================== KILLER CHAT PANEL =====================
 function KillerChatPanel({ chat, myId, myName, onSend, isAdmin }) {
   const [text, setText] = useState("");
   const [open, setOpen] = useState(true);
@@ -1134,17 +1315,11 @@ function KillerChatPanel({ chat, myId, myName, onSend, isAdmin }) {
 
   return (
     <div className="border-t-2 border-rose-500/40 bg-gradient-to-b from-rose-950/30 to-black sticky bottom-0">
-      <div
-        className="px-4 py-2.5 flex items-center justify-between cursor-pointer bg-rose-950/40"
-        onClick={() => setOpen(!open)}
-      >
+      <div className="px-4 py-2.5 flex items-center justify-between cursor-pointer bg-rose-950/40" onClick={() => setOpen(!open)}>
         <div className="flex items-center gap-2">
-          <div className="relative">
-            <Radio className="w-3.5 h-3.5 text-rose-400" />
-            <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-rose-400 anim-blink" />
-          </div>
+          <Radio className="w-3.5 h-3.5 text-rose-400" />
           <span className="font-mono text-[11px] text-rose-300 tracking-[0.2em] font-semibold">
-            ENCRYPTED // {isAdmin ? "ADMIN_VIEW" : "INFILTRATOR_CHANNEL"}
+            ENCRYPTED // {isAdmin ? "MASTER_VIEW" : "MAFIA_CHANNEL"}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -1160,29 +1335,21 @@ function KillerChatPanel({ chat, myId, myName, onSend, isAdmin }) {
               <div className="text-center py-6">
                 <Skull className="w-6 h-6 text-rose-500/30 mx-auto mb-2" />
                 <p className="text-rose-400/40 text-xs italic font-mono">// 채널이 비어있습니다</p>
-                <p className="text-rose-400/30 text-[10px] mt-1">서로 정체를 확인하고 작전을 짜세요</p>
               </div>
             ) : (
               chat.map((m) => {
                 const mine = m.senderId === myId;
                 return (
                   <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[80%] ${mine ? "order-2" : "order-1"}`}>
+                    <div className="max-w-[80%]">
                       <div className={`flex items-center gap-2 mb-0.5 ${mine ? "justify-end" : ""}`}>
-                        <span className={`font-mono text-[10px] ${
-                          m.isAdmin ? "text-amber-400" : mine ? "text-rose-300" : "text-rose-400/70"
-                        }`}>
-                          {m.isAdmin && "👁 "}{m.senderName}
+                        <span className={`font-mono text-[10px] ${m.isAdmin ? "text-amber-400" : mine ? "text-rose-300" : "text-rose-400/70"}`}>
+                          {m.isAdmin ? "MASTER " : ""}
+                          {m.senderName}
                         </span>
                         <span className="font-mono text-[9px] text-white/30">{timeAgo(m.timestamp)}</span>
                       </div>
-                      <div className={`px-3 py-2 text-sm ${
-                        m.isAdmin
-                          ? "bg-amber-500/10 border border-amber-500/30 text-amber-100"
-                          : mine
-                          ? "bg-rose-500/15 border border-rose-500/40 text-rose-50"
-                          : "bg-white/[0.04] border border-white/10 text-white/90"
-                      }`}>
+                      <div className={`px-3 py-2 text-sm ${m.isAdmin ? "bg-amber-500/10 border border-amber-500/30 text-amber-100" : mine ? "bg-rose-500/15 border border-rose-500/40 text-rose-50" : "bg-white/[0.04] border border-white/10 text-white/90"}`}>
                         {m.text}
                       </div>
                     </div>
@@ -1191,26 +1358,17 @@ function KillerChatPanel({ chat, myId, myName, onSend, isAdmin }) {
               })
             )}
           </div>
-
           <div className="border-t border-rose-500/20 px-3 py-2.5 flex gap-2">
             <input
               type="text"
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && send()}
-              placeholder={isAdmin ? "운영자 메시지..." : "잠입자에게 메시지..."}
+              placeholder={isAdmin ? "마스터 메시지..." : "마피아 팀에게 메시지..."}
               maxLength={200}
               className="flex-1 bg-black/40 border border-white/10 focus:border-rose-400/60 px-3 py-2.5 text-sm text-white outline-none"
             />
-            <button
-              onClick={send}
-              disabled={!text.trim()}
-              className={`px-4 ${
-                text.trim()
-                  ? "bg-rose-500 text-white hover:bg-rose-400"
-                  : "bg-white/5 text-white/30"
-              } transition`}
-            >
+            <button onClick={send} disabled={!text.trim()} className={`px-4 ${text.trim() ? "bg-rose-500 text-white hover:bg-rose-400" : "bg-white/5 text-white/30"} transition`}>
               <Send className="w-4 h-4" />
             </button>
           </div>
@@ -1220,35 +1378,33 @@ function KillerChatPanel({ chat, myId, myName, onSend, isAdmin }) {
   );
 }
 
-// ===================== PLAYER VOTING =====================
-function PlayerVoting({ myId, myName, myRole, players, chat, votes, onSendChat, onSubmitVote }) {
+function PlayerVoting({ myId, myName, myRole, gameState, gameConfig, players, roles, chat, votes, onSendChat, onSubmitVote }) {
   const [selected, setSelected] = useState([]);
   const myVote = votes[myId];
   const submitted = !!myVote;
-  const isKiller = myRole === "killer";
+  const pickCount = Math.max(1, mafiaCount(roles) || mafiaCount(gameConfig));
+  const isMafiaTeam = getRoleDef(myRole).team === "mafia";
   const totalVoted = Object.keys(votes).length;
 
   const toggle = (id) => {
-    if (submitted) return;
-    if (id === myId) return;
+    if (submitted || id === myId) return;
     if (selected.includes(id)) {
-      setSelected(selected.filter(x => x !== id));
-    } else if (selected.length < 2) {
+      setSelected(selected.filter((x) => x !== id));
+    } else if (selected.length < pickCount) {
       setSelected([...selected, id]);
     }
-  };
-
-  const submit = () => {
-    if (selected.length === 2) onSubmitVote(selected);
   };
 
   return (
     <div className="flex-1 flex flex-col">
       <div className="px-5 py-6 max-w-md w-full mx-auto flex-1">
         <div className="text-center mb-6 anim-fade-up">
-          <div className="font-mono text-[10px] text-rose-400/80 tracking-[0.3em] mb-2 anim-blink">// FINAL_JUDGMENT</div>
+          <div className="font-mono text-[10px] text-rose-400/80 tracking-[0.3em] mb-2 anim-blink">// FINAL_VOTE</div>
           <h2 className="text-3xl font-bold text-white mb-2">최후의 지목</h2>
-          <p className="text-white/60 text-sm">잠입자로 의심되는 2명을 선택하세요</p>
+          <p className="text-white/60 text-sm">마피아 팀으로 의심되는 {pickCount}명을 선택하세요</p>
+          <div className="mt-4">
+            <Countdown endsAt={gameState.votingEndsAt} />
+          </div>
         </div>
 
         {!submitted ? (
@@ -1263,16 +1419,10 @@ function PlayerVoting({ myId, myName, myRole, players, chat, votes, onSendChat, 
                     onClick={() => toggle(p.id)}
                     disabled={isSelf}
                     className={`w-full px-4 py-3.5 border transition-all text-left flex items-center gap-3 anim-fade-up ${
-                      isSelf
-                        ? "border-white/5 bg-white/[0.02] opacity-40 cursor-not-allowed"
-                        : isSelected
-                        ? "border-rose-500 bg-rose-500/10"
-                        : "border-white/15 bg-white/[0.02] hover:border-white/30"
+                      isSelf ? "border-white/5 bg-white/[0.02] opacity-40 cursor-not-allowed" : isSelected ? "border-rose-500 bg-rose-500/10" : "border-white/15 bg-white/[0.02] hover:border-white/30"
                     }`}
                   >
-                    <div className={`w-9 h-9 rounded-full border flex items-center justify-center ${
-                      isSelected ? "border-rose-400 bg-rose-500/20" : "border-white/20"
-                    }`}>
+                    <div className={`w-9 h-9 rounded-full border flex items-center justify-center ${isSelected ? "border-rose-400 bg-rose-500/20" : "border-white/20"}`}>
                       {isSelected ? <Crosshair className="w-4 h-4 text-rose-400" /> : <User className="w-4 h-4 text-white/50" />}
                     </div>
                     <div className="flex-1">
@@ -1280,94 +1430,57 @@ function PlayerVoting({ myId, myName, myRole, players, chat, votes, onSendChat, 
                       <div className="font-mono text-[10px] text-white/30">ID:{shortId(p.id)}</div>
                     </div>
                     {isSelf && <span className="font-mono text-[10px] text-white/30">YOU</span>}
-                    {isSelected && (
-                      <span className="font-mono text-[10px] text-rose-400 tracking-wider">SUSPECT</span>
-                    )}
                   </button>
                 );
               })}
             </div>
-
             <div className="text-center mb-4">
-              <span className="font-mono text-xs text-white/50">선택: {selected.length} / 2</span>
+              <span className="font-mono text-xs text-white/50">선택: {selected.length} / {pickCount}</span>
             </div>
-
             <button
-              onClick={submit}
-              disabled={selected.length !== 2}
-              className={`w-full py-4 font-semibold transition-all ${
-                selected.length === 2
-                  ? "bg-rose-500 text-white hover:bg-rose-400"
-                  : "bg-white/5 text-white/30 cursor-not-allowed"
-              }`}
+              onClick={() => selected.length === pickCount && onSubmitVote(selected)}
+              disabled={selected.length !== pickCount}
+              className={`w-full py-4 font-semibold transition-all ${selected.length === pickCount ? "bg-rose-500 text-white hover:bg-rose-400" : "bg-white/5 text-white/30 cursor-not-allowed"}`}
             >
-              {selected.length === 2 ? "투표 제출" : `${2 - selected.length}명 더 선택`}
+              {selected.length === pickCount ? "투표 제출" : `${pickCount - selected.length}명 더 선택`}
             </button>
           </>
         ) : (
           <div className="text-center anim-scale-in">
             <div className="border border-cyan-400/40 bg-cyan-400/5 p-8 mb-6 relative">
-              <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-cyan-400" />
-              <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-cyan-400" />
-              <div className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-cyan-400" />
-              <div className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-cyan-400" />
-
+              <Corner tone="cyan" />
               <Check className="w-12 h-12 text-cyan-400 mx-auto mb-3" />
               <p className="font-mono text-[10px] text-cyan-400 tracking-[0.3em] mb-2">VOTE_SUBMITTED</p>
               <p className="text-white text-lg font-semibold mb-3">투표 완료</p>
-              <p className="text-white/60 text-sm mb-4">결과를 기다리는 중...</p>
-              <p className="font-mono text-xs text-cyan-300">{totalVoted} / {TOTAL_PLAYERS} 표 집계</p>
-            </div>
-
-            <div className="text-white/40 text-xs">
-              지목한 대상:
-              <div className="flex justify-center gap-2 mt-2">
-                {myVote.map(id => {
-                  const p = players.find(x => x.id === id);
-                  return (
-                    <span key={id} className="px-3 py-1 bg-rose-500/20 border border-rose-500/40 text-rose-300 text-sm">
-                      {p?.name}
-                    </span>
-                  );
-                })}
-              </div>
+              <p className="font-mono text-xs text-cyan-300">{totalVoted} / {normalizeConfig(gameConfig).totalPlayers} 표 집계</p>
             </div>
           </div>
         )}
       </div>
 
-      {isKiller && (
-        <KillerChatPanel chat={chat} myId={myId} myName={myName} onSend={onSendChat} isAdmin={false} />
-      )}
+      {isMafiaTeam && <KillerChatPanel chat={chat} myId={myId} myName={myName} onSend={onSendChat} isAdmin={false} />}
     </div>
   );
 }
 
-// ===================== RESULTS =====================
-function ResultsView({ myId, players, roles, votes, isAdmin }) {
+function ResultsView({ myId, players, roles, votes, gameConfig, isAdmin }) {
   const [revealed, setRevealed] = useState(false);
-
+  const pickCount = Math.max(1, mafiaCount(roles) || mafiaCount(gameConfig));
   const tally = {};
-  players.forEach(p => tally[p.id] = 0);
+  players.forEach((p) => {
+    tally[p.id] = 0;
+  });
   Object.values(votes).forEach((targets) => {
-    if (Array.isArray(targets)) {
-      targets.forEach(t => { tally[t] = (tally[t] || 0) + 1; });
-    }
+    if (Array.isArray(targets)) targets.forEach((t) => { tally[t] = (tally[t] || 0) + 1; });
   });
 
-  const sorted = players
-    .map(p => ({ ...p, votes: tally[p.id] || 0, role: roles[p.id] }))
-    .sort((a, b) => b.votes - a.votes);
-
-  const eliminated = sorted.slice(0, 2);
-  const killerIds = players.filter(p => roles[p.id] === "killer").map(p => p.id);
-  const eliminatedKillers = eliminated.filter(p => p.role === "killer");
-  const citizensWin = eliminatedKillers.length === KILLER_COUNT;
-
-  const myRole = roles[myId];
-  const iWon = isAdmin
-    ? null
-    : (myRole === "citizen" && citizensWin) || (myRole === "killer" && !citizensWin);
+  const sorted = players.map((p) => ({ ...p, votes: tally[p.id] || 0, role: roles[p.id] })).sort((a, b) => b.votes - a.votes);
+  const eliminated = sorted.slice(0, pickCount);
+  const mafiaIds = players.filter((p) => ROLE_DEFS[roles[p.id]]?.team === "mafia").map((p) => p.id);
+  const eliminatedMafia = eliminated.filter((p) => ROLE_DEFS[p.role]?.team === "mafia");
+  const townWins = mafiaIds.length > 0 && eliminatedMafia.length === mafiaIds.length;
+  const myTeam = ROLE_DEFS[roles[myId]]?.team;
+  const iWon = isAdmin ? null : (myTeam === "town" && townWins) || (myTeam === "mafia" && !townWins);
 
   return (
     <div className="flex-1 px-5 py-6">
@@ -1377,79 +1490,48 @@ function ResultsView({ myId, players, roles, votes, isAdmin }) {
             <div className="font-mono text-[10px] text-white/50 tracking-[0.3em] mb-3 anim-blink">// CALCULATING_RESULTS</div>
             <h2 className="text-3xl font-bold text-white mb-3">진실의 시간</h2>
             <p className="text-white/60 mb-10 text-sm">모든 표가 모였습니다.</p>
-
-            <div className="flex items-center gap-3 mb-10">
-              <div className="w-2 h-2 rounded-full bg-cyan-400 anim-blink" />
-              <div className="w-2 h-2 rounded-full bg-cyan-400 anim-blink" style={{animationDelay: "0.3s"}} />
-              <div className="w-2 h-2 rounded-full bg-cyan-400 anim-blink" style={{animationDelay: "0.6s"}} />
-            </div>
-
-            <button
-              onClick={() => setRevealed(true)}
-              className="px-12 py-4 bg-white text-black font-bold hover:bg-cyan-100 transition anim-pulse-glow"
-            >
+            <button onClick={() => setRevealed(true)} className="px-12 py-4 bg-white text-black font-bold hover:bg-cyan-100 transition anim-pulse-glow">
               결과 공개
             </button>
           </div>
         ) : (
           <div className="anim-fade-in py-4">
-            <div className={`border-2 p-6 mb-6 text-center relative ${
-              citizensWin
-                ? "border-cyan-400 bg-cyan-500/5"
-                : "border-rose-500 bg-rose-500/5"
-            }`}>
-              <div className={`absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 ${citizensWin ? "border-cyan-400" : "border-rose-500"}`} />
-              <div className={`absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 ${citizensWin ? "border-cyan-400" : "border-rose-500"}`} />
-              <div className={`absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 ${citizensWin ? "border-cyan-400" : "border-rose-500"}`} />
-              <div className={`absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 ${citizensWin ? "border-cyan-400" : "border-rose-500"}`} />
-
-              {citizensWin ? (
+            <div className={`border-2 p-6 mb-6 text-center relative ${townWins ? "border-cyan-400 bg-cyan-500/5" : "border-rose-500 bg-rose-500/5"}`}>
+              <Corner tone={townWins ? "cyan" : "rose"} thick />
+              {townWins ? (
                 <>
                   <UserCheck className="w-14 h-14 text-cyan-400 mx-auto mb-3" />
-                  <p className="font-mono text-[10px] text-cyan-400 tracking-[0.3em] mb-2">// MISSION_COMPLETE</p>
-                  <h2 className="text-3xl font-bold text-cyan-300 mb-2">시민 승리</h2>
-                  <p className="text-cyan-100/80 text-sm">두 잠입자를 모두 색출했다.</p>
+                  <p className="font-mono text-[10px] text-cyan-400 tracking-[0.3em] mb-2">// TOWN_WIN</p>
+                  <h2 className="text-3xl font-bold text-cyan-300 mb-2">시민 팀 승리</h2>
+                  <p className="text-cyan-100/80 text-sm">마피아 팀을 모두 색출했습니다.</p>
                 </>
               ) : (
                 <>
                   <Skull className="w-14 h-14 text-rose-400 mx-auto mb-3 anim-glitch" />
-                  <p className="font-mono text-[10px] text-rose-400 tracking-[0.3em] mb-2">// SYSTEM_COMPROMISED</p>
-                  <h2 className="text-3xl font-bold text-rose-300 mb-2">잠입자 승리</h2>
-                  <p className="text-rose-100/80 text-sm">
-                    {eliminatedKillers.length === 0
-                      ? "잠입자들이 정체를 완벽히 숨겼다."
-                      : "한 명의 잠입자가 살아남았다."}
-                  </p>
+                  <p className="font-mono text-[10px] text-rose-400 tracking-[0.3em] mb-2">// MAFIA_WIN</p>
+                  <h2 className="text-3xl font-bold text-rose-300 mb-2">마피아 팀 승리</h2>
+                  <p className="text-rose-100/80 text-sm">마피아 팀이 정체를 숨기는 데 성공했습니다.</p>
                 </>
               )}
-
               {iWon !== null && (
-                <div className={`mt-4 pt-4 border-t font-mono text-xs tracking-[0.3em] ${
-                  iWon ? "border-cyan-400/30 text-cyan-300" : "border-rose-500/30 text-rose-300"
-                }`}>
+                <div className={`mt-4 pt-4 border-t font-mono text-xs tracking-[0.3em] ${iWon ? "border-cyan-400/30 text-cyan-300" : "border-rose-500/30 text-rose-300"}`}>
                   YOU {iWon ? "WIN" : "LOSE"}
                 </div>
               )}
             </div>
 
             <div className="mb-6 anim-fade-up">
-              <div className="font-mono text-[10px] text-white/50 tracking-[0.25em] mb-2">// INFILTRATORS_IDENTIFIED</div>
+              <div className="font-mono text-[10px] text-white/50 tracking-[0.25em] mb-2">// ROLE_REVEAL</div>
               <div className="grid grid-cols-2 gap-3">
-                {killerIds.map((id) => {
-                  const p = players.find(x => x.id === id);
-                  const wasEliminated = eliminated.find(e => e.id === id);
+                {players.map((p) => {
+                  const role = roles[p.id] || "citizen";
+                  const def = getRoleDef(role);
+                  const Icon = def.icon;
                   return (
-                    <div key={id} className={`p-4 border ${
-                      wasEliminated ? "border-cyan-400/40 bg-cyan-400/5" : "border-rose-500/60 bg-rose-500/10 anim-danger-glow"
-                    }`}>
-                      <Skull className={`w-6 h-6 mb-2 ${wasEliminated ? "text-cyan-400/70" : "text-rose-400"}`} />
-                      <div className="text-white font-bold mb-0.5">{p?.name}</div>
-                      <div className="font-mono text-[10px] text-white/40">ID:{shortId(id)}</div>
-                      <div className={`mt-2 font-mono text-[9px] tracking-wider ${
-                        wasEliminated ? "text-cyan-400" : "text-rose-300"
-                      }`}>
-                        {wasEliminated ? "✓ 색출됨" : "✗ 도주 성공"}
-                      </div>
+                    <div key={p.id} className={`p-4 border ${roleToneClasses(role)}`}>
+                      <Icon className="w-5 h-5 mb-2" />
+                      <div className="text-white font-bold mb-0.5">{p.name}</div>
+                      <div className="font-mono text-[10px] text-white/50">{def.name}</div>
                     </div>
                   );
                 })}
@@ -1457,39 +1539,31 @@ function ResultsView({ myId, players, roles, votes, isAdmin }) {
             </div>
 
             <div className="border border-white/10 bg-white/[0.02] mb-6">
-              <div className="px-4 py-3 border-b border-white/5 font-mono text-[10px] text-white/50 tracking-[0.25em]">
-                // VOTE_TALLY
-              </div>
+              <div className="px-4 py-3 border-b border-white/5 font-mono text-[10px] text-white/50 tracking-[0.25em]">// VOTE_TALLY</div>
               <div className="divide-y divide-white/5">
                 {sorted.map((p, idx) => {
-                  const isKiller = p.role === "killer";
-                  const wasEliminated = idx < 2;
-                  const pct = (p.votes / (TOTAL_PLAYERS * 2)) * 100;
+                  const role = p.role || "citizen";
+                  const isMafia = ROLE_DEFS[role]?.team === "mafia";
+                  const wasEliminated = idx < pickCount;
+                  const pct = (p.votes / Math.max(1, normalizeConfig(gameConfig).totalPlayers * pickCount)) * 100;
                   return (
                     <div key={p.id} className={`px-4 py-3 ${wasEliminated ? "bg-rose-950/20" : ""}`}>
                       <div className="flex items-center justify-between mb-1.5">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-[10px] text-white/40">#{idx + 1}</span>
                           <span className="text-white font-medium text-sm">{p.name}</span>
-                          {isKiller && <Skull className="w-3 h-3 text-rose-400" />}
+                          {isMafia && <Skull className="w-3 h-3 text-rose-400" />}
                           {wasEliminated && <span className="font-mono text-[9px] text-rose-300 tracking-wider">ELIMINATED</span>}
                         </div>
                         <span className="font-mono text-xs text-white/70">{p.votes}표</span>
                       </div>
                       <div className="h-1 bg-white/10 overflow-hidden">
-                        <div
-                          className={`h-full transition-all duration-1000 ${isKiller ? "bg-rose-500" : "bg-cyan-400"}`}
-                          style={{ width: `${pct}%` }}
-                        />
+                        <div className={`h-full transition-all duration-1000 ${isMafia ? "bg-rose-500" : "bg-cyan-400"}`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   );
                 })}
               </div>
-            </div>
-
-            <div className="text-center text-white/40 font-mono text-[10px] tracking-wider">
-              {isAdmin ? "운영자가 다음 게임을 시작할 수 있습니다" : "운영자가 다음 게임을 준비합니다"}
             </div>
           </div>
         )}
@@ -1499,8 +1573,24 @@ function ResultsView({ myId, players, roles, votes, isAdmin }) {
 }
 
 // ===================== ADMIN SCREEN =====================
-function AdminScreen({ myId, myName, gameState, players, roles, chat, votes, onStart, onAdvance, onEndVoting, onReset, onSendChat, onLeave }) {
-  const [tab, setTab] = useState("dashboard");
+function AdminScreen({
+  myId,
+  gameState,
+  gameConfig,
+  players,
+  roles,
+  chat,
+  votes,
+  onSaveConfig,
+  onStart,
+  onAdvance,
+  onRestartTimer,
+  onEndVoting,
+  onReset,
+  onSendChat,
+  onLeave,
+}) {
+  const [tab, setTab] = useState("setup");
   const phase = gameState?.phase || "lobby";
   const round = gameState?.round || 0;
 
@@ -1509,23 +1599,19 @@ function AdminScreen({ myId, myName, gameState, players, roles, chat, votes, onS
     else if (phase === "results") setTab("results");
   }, [phase]);
 
-  const killerIds = Object.keys(roles).filter(id => roles[id] === "killer");
-
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="border-b border-amber-500/30 px-4 py-3 flex items-center justify-between bg-black/40 backdrop-blur sticky top-0 z-30">
+      <header className="border-b border-amber-500/30 px-4 py-3 flex items-center justify-between bg-black/50 backdrop-blur sticky top-0 z-30">
         <div className="flex items-center gap-3">
           <Shield className="w-4 h-4 text-amber-400" />
           <div>
-            <div className="font-mono text-[10px] text-amber-400/70 tracking-wider">ADMIN CONSOLE</div>
-            <div className="text-amber-300 text-sm font-bold">운영자 / God-mode</div>
+            <div className="font-mono text-[10px] text-amber-400/70 tracking-wider">MASTER CONSOLE</div>
+            <div className="text-amber-300 text-sm font-bold">마스터 화면</div>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <span className="font-mono text-[10px] text-white/50 tracking-wider px-2 py-1 border border-white/10">
-            {phase === "lobby" ? "LOBBY" :
-             phase === "playing" ? `R0${round}` :
-             phase === "voting" ? "VOTING" : "RESULTS"}
+            {phase === "lobby" ? "LOBBY" : phase === "playing" ? `R0${round}` : phase === "voting" ? "VOTING" : "RESULTS"}
           </span>
           <button onClick={onLeave} className="text-white/40 hover:text-white/80">
             <LogOut className="w-4 h-4" />
@@ -1535,11 +1621,12 @@ function AdminScreen({ myId, myName, gameState, players, roles, chat, votes, onS
 
       <nav className="border-b border-white/10 flex bg-black/30">
         {[
-          { id: "dashboard", label: "대시보드", icon: Activity },
-          { id: "killers", label: "잠입자", icon: Skull, badge: killerIds.length || null },
-          { id: "chat", label: "채팅방", icon: MessageSquare, badge: chat.length || null },
+          { id: "setup", label: "설정", icon: Settings },
+          { id: "dashboard", label: "현황", icon: Activity },
+          { id: "roles", label: "직업표", icon: Users },
+          { id: "chat", label: "채팅", icon: MessageSquare, badge: chat.length || null },
           { id: "control", label: "진행", icon: Play },
-        ].map(t => {
+        ].map((t) => {
           const Icon = t.icon;
           const active = tab === t.id;
           return (
@@ -1547,18 +1634,12 @@ function AdminScreen({ myId, myName, gameState, players, roles, chat, votes, onS
               key={t.id}
               onClick={() => setTab(t.id)}
               className={`flex-1 px-2 py-3 flex flex-col items-center gap-1 border-b-2 transition-all ${
-                active
-                  ? "border-amber-400 bg-amber-400/5 text-amber-300"
-                  : "border-transparent text-white/50 hover:text-white/80"
+                active ? "border-amber-400 bg-amber-400/5 text-amber-300" : "border-transparent text-white/50 hover:text-white/80"
               }`}
             >
               <div className="relative">
                 <Icon className="w-4 h-4" />
-                {t.badge && (
-                  <span className="absolute -top-1.5 -right-2 min-w-[14px] h-[14px] px-1 bg-rose-500 text-white text-[9px] flex items-center justify-center rounded-full font-mono font-bold">
-                    {t.badge}
-                  </span>
-                )}
+                {t.badge && <span className="absolute -top-1.5 -right-2 min-w-[14px] h-[14px] px-1 bg-rose-500 text-white text-[9px] flex items-center justify-center rounded-full font-mono font-bold">{t.badge}</span>}
               </div>
               <span className="text-[10px] font-medium tracking-wider">{t.label}</span>
             </button>
@@ -1567,102 +1648,360 @@ function AdminScreen({ myId, myName, gameState, players, roles, chat, votes, onS
       </nav>
 
       <div className="flex-1 overflow-y-auto">
-        {tab === "dashboard" && (
-          <AdminDashboard
-            phase={phase}
-            round={round}
-            players={players}
-            roles={roles}
-            votes={votes}
-          />
-        )}
-        {tab === "killers" && (
-          <AdminKillers players={players} roles={roles} phase={phase} />
-        )}
-        {tab === "chat" && (
-          <AdminChat chat={chat} myId={myId} myName={myName} onSend={onSendChat} phase={phase} />
-        )}
+        {tab === "setup" && <AdminSetup config={gameConfig} phase={phase} onSave={onSaveConfig} />}
+        {tab === "dashboard" && <AdminDashboard phase={phase} round={round} players={players} roles={roles} votes={votes} gameConfig={gameConfig} />}
+        {tab === "roles" && <AdminRoles players={players} roles={roles} phase={phase} gameConfig={gameConfig} />}
+        {tab === "chat" && <AdminChat chat={chat} myId={myId} onSend={onSendChat} phase={phase} />}
         {tab === "control" && (
           <AdminControl
             phase={phase}
             round={round}
+            gameState={gameState}
+            gameConfig={gameConfig}
             players={players}
             votes={votes}
             onStart={onStart}
             onAdvance={onAdvance}
+            onRestartTimer={onRestartTimer}
             onEndVoting={onEndVoting}
             onReset={onReset}
           />
         )}
-        {tab === "voting" && phase === "voting" && (
-          <AdminVotingMonitor players={players} votes={votes} onEndVoting={onEndVoting} />
-        )}
-        {tab === "results" && phase === "results" && (
-          <ResultsView myId={myId} players={players} roles={roles} votes={votes} isAdmin={true} />
-        )}
+        {tab === "voting" && phase === "voting" && <AdminVotingMonitor players={players} votes={votes} gameConfig={gameConfig} onEndVoting={onEndVoting} />}
+        {tab === "results" && phase === "results" && <ResultsView myId={myId} players={players} roles={roles} votes={votes} gameConfig={gameConfig} isAdmin />}
       </div>
     </div>
   );
 }
 
-function AdminDashboard({ phase, round, players, roles, votes }) {
-  const killerCount = Object.values(roles).filter(r => r === "killer").length;
+function AdminSetup({ config, phase, onSave }) {
+  const [draft, setDraft] = useState(normalizeConfig(config));
+  const configSignature = JSON.stringify(normalizeConfig(config));
+  const cfg = normalizeConfig(draft);
+  const specialTotal = SPECIAL_ROLE_IDS.reduce((sum, id) => sum + cfg.roles[id], 0);
+  const invalid = !isConfigValid(cfg);
+
+  useEffect(() => {
+    setDraft(JSON.parse(configSignature));
+  }, [configSignature]);
+
+  const updateRole = (role, next) => {
+    setDraft((prev) => normalizeConfig({ ...prev, roles: { ...prev.roles, [role]: clamp(next, 0, 20) } }));
+  };
+
+  return (
+    <div className="px-5 py-5 space-y-4">
+      <div className="anim-fade-up">
+        <div className="font-mono text-[10px] text-amber-400/70 tracking-[0.3em] mb-2">// GAME_SETUP</div>
+        <h2 className="text-xl font-bold text-white mb-1">게임 설정</h2>
+        <p className="text-white/45 text-sm">총 인원, 범인 수, 직업 구성, 라운드 시간을 마스터가 정합니다.</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Stepper label="총 인원" value={cfg.totalPlayers} min={4} max={20} onChange={(v) => setDraft((prev) => normalizeConfig({ ...prev, totalPlayers: v }))} />
+        <Stepper label="라운드 시간" value={Math.floor(cfg.roundSeconds / 60)} min={1} max={30} suffix="분" onChange={(v) => setDraft((prev) => normalizeConfig({ ...prev, roundSeconds: v * 60 }))} />
+      </div>
+
+      <div className="border border-white/10 bg-white/[0.02]">
+        <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+          <span className="font-mono text-[10px] text-white/50 tracking-[0.25em]">ROLE_COUNTS</span>
+          <span className={`font-mono text-[10px] ${specialTotal > cfg.totalPlayers ? "text-rose-400" : "text-cyan-300"}`}>
+            특수직 {specialTotal}명 · 시민 {cfg.roles.citizen}명
+          </span>
+        </div>
+        <div className="divide-y divide-white/5">
+          {SPECIAL_ROLE_IDS.map((role) => (
+            <RoleCountRow key={role} role={role} value={cfg.roles[role]} onChange={(v) => updateRole(role, v)} />
+          ))}
+          <div className="px-4 py-3 flex items-center justify-between bg-cyan-400/[0.03]">
+            <div className="flex items-center gap-3">
+              <UserCheck className="w-5 h-5 text-cyan-300" />
+              <div>
+                <div className="text-white text-sm font-semibold">시민</div>
+                <div className="text-white/35 text-xs">남은 인원이 자동 배정됩니다</div>
+              </div>
+            </div>
+            <span className="font-mono text-lg text-cyan-300">{cfg.roles.citizen}</span>
+          </div>
+        </div>
+      </div>
+
+      {invalid && (
+        <div className="border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100 flex gap-2">
+          <AlertCircle className="w-4 h-4 text-rose-300 mt-0.5 flex-shrink-0" />
+          <span>특수 직업 수가 총 인원을 넘었거나 마피아 팀이 없습니다.</span>
+        </div>
+      )}
+
+      <button
+        onClick={() => onSave(cfg)}
+        disabled={invalid || phase !== "lobby"}
+        className={`w-full py-4 font-bold transition ${!invalid && phase === "lobby" ? "bg-amber-400 text-black hover:bg-amber-300" : "bg-white/5 text-white/30 cursor-not-allowed"}`}
+      >
+        {phase === "lobby" ? "설정 저장" : "진행 중에는 설정을 바꿀 수 없습니다"}
+      </button>
+    </div>
+  );
+}
+
+function Stepper({ label, value, min, max, suffix = "명", onChange }) {
+  return (
+    <div className="border border-white/10 bg-white/[0.02] p-3">
+      <div className="font-mono text-[10px] text-white/50 tracking-[0.2em] mb-2">{label}</div>
+      <div className="flex items-center justify-between gap-3">
+        <button onClick={() => onChange(clamp(value - 1, min, max))} className="w-9 h-9 border border-white/10 flex items-center justify-center hover:bg-white/5">
+          <Minus className="w-4 h-4" />
+        </button>
+        <div className="text-xl font-bold text-white">
+          {value}<span className="text-sm text-white/40 ml-1">{suffix}</span>
+        </div>
+        <button onClick={() => onChange(clamp(value + 1, min, max))} className="w-9 h-9 border border-white/10 flex items-center justify-center hover:bg-white/5">
+          <Plus className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RoleCountRow({ role, value, onChange }) {
+  const def = getRoleDef(role);
+  const Icon = def.icon;
+  return (
+    <div className="px-4 py-3 flex items-center justify-between">
+      <div className="flex items-center gap-3">
+        <div className={`w-9 h-9 border flex items-center justify-center ${roleToneClasses(role)}`}>
+          <Icon className="w-4 h-4" />
+        </div>
+        <div>
+          <div className="text-white text-sm font-semibold">{def.name}</div>
+          <div className="text-white/35 text-xs">{def.brief}</div>
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <button onClick={() => onChange(value - 1)} className="w-8 h-8 border border-white/10 flex items-center justify-center hover:bg-white/5">
+          <Minus className="w-3.5 h-3.5" />
+        </button>
+        <span className="w-6 text-center font-mono text-white">{value}</span>
+        <button onClick={() => onChange(value + 1)} className="w-8 h-8 border border-white/10 flex items-center justify-center hover:bg-white/5">
+          <Plus className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AdminDashboard({ phase, round, players, roles, votes, gameConfig }) {
+  const cfg = normalizeConfig(gameConfig);
+  const voteCount = Object.keys(votes).length;
+  return (
+    <div className="px-5 py-5 space-y-4">
+      <div className="grid grid-cols-2 gap-3 stagger">
+        <StatCard label="단계" value={phase === "lobby" ? "대기" : phase === "playing" ? `R${round}` : phase === "voting" ? "투표" : "종료"} icon={Activity} />
+        <StatCard label="접속자" value={`${players.length}/${cfg.totalPlayers}`} icon={Users} />
+        <StatCard label="마피아 팀" value={`${mafiaCount(cfg)}명`} icon={Skull} accent="rose" />
+        <StatCard label="투표" value={`${voteCount}/${cfg.totalPlayers}`} icon={Vote} accent={voteCount > 0 ? "amber" : "white"} />
+      </div>
+      <RoleSummary config={cfg} />
+      <PlayerList players={players} roles={roles} votes={votes} />
+    </div>
+  );
+}
+
+function AdminRoles({ players, roles, phase, gameConfig }) {
+  if (phase === "lobby") {
+    return (
+      <div className="px-5 py-5">
+        <RoleSummary config={gameConfig} />
+        <div className="mt-4 border border-white/10 bg-white/[0.02] py-12 text-center">
+          <Lock className="w-8 h-8 text-white/30 mx-auto mb-3" />
+          <p className="text-white/50 text-sm mb-1">직업 미배정</p>
+          <p className="text-white/30 text-xs">게임 시작 시 설정값에 맞춰 무작위 배정됩니다</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="px-5 py-5">
+      <PlayerList players={players} roles={roles} showRoles />
+    </div>
+  );
+}
+
+function AdminChat({ chat, myId, onSend, phase }) {
+  if (phase === "lobby") {
+    return (
+      <div className="px-5 py-12 text-center">
+        <Lock className="w-8 h-8 text-white/30 mx-auto mb-3" />
+        <p className="text-white/50 text-sm">채팅 비활성</p>
+        <p className="text-white/30 text-xs">게임 시작 후 마피아 채팅이 활성화됩니다</p>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col h-[calc(100vh-180px)]">
+      <div className="px-5 py-3 bg-rose-950/20 border-b border-rose-500/30">
+        <div className="flex items-center gap-2">
+          <Eye className="w-3.5 h-3.5 text-amber-400" />
+          <span className="font-mono text-[10px] text-amber-400 tracking-[0.25em]">MASTER_VIEW // 마피아 채팅 모니터링</span>
+        </div>
+      </div>
+      <KillerChatPanel chat={chat} myId={myId} myName="마스터" onSend={onSend} isAdmin />
+    </div>
+  );
+}
+
+function AdminControl({ phase, round, gameState, gameConfig, players, votes, onStart, onAdvance, onRestartTimer, onEndVoting, onReset }) {
+  const cfg = normalizeConfig(gameConfig);
+  const canStart = phase === "lobby" && players.length === cfg.totalPlayers && isConfigValid(cfg);
+  const allVoted = phase === "voting" && Object.keys(votes).length === cfg.totalPlayers;
   const voteCount = Object.keys(votes).length;
 
   return (
     <div className="px-5 py-5 space-y-4">
-      <div className="grid grid-cols-2 gap-3 stagger">
-        <StatCard label="단계" value={
-          phase === "lobby" ? "대기" : phase === "playing" ? `R${round}` : phase === "voting" ? "투표" : "종료"
-        } icon={Activity} />
-        <StatCard label="접속자" value={`${players.length}/${TOTAL_PLAYERS}`} icon={Users} />
-        <StatCard label="잠입자" value={killerCount > 0 ? `${killerCount}명 배정` : "미배정"} icon={Skull} accent={killerCount > 0 ? "rose" : "white"} />
-        <StatCard label="투표" value={`${voteCount}/${TOTAL_PLAYERS}`} icon={Vote} accent={voteCount > 0 ? "amber" : "white"} />
-      </div>
-
-      <div className="border border-white/10 bg-white/[0.02] anim-fade-up">
-        <div className="px-4 py-3 border-b border-white/5 font-mono text-[10px] text-white/50 tracking-[0.25em]">
-          // ALL_PLAYERS
+      <div className="border border-amber-500/30 bg-amber-500/5 p-4 anim-fade-up">
+        <div className="font-mono text-[10px] text-amber-400 tracking-[0.25em] mb-2">CURRENT_PHASE</div>
+        <div className="text-2xl font-bold text-white mb-1">
+          {phase === "lobby" && "대기실"}
+          {phase === "playing" && `라운드 ${round} / ${TOTAL_ROUNDS}`}
+          {phase === "voting" && "투표 진행 중"}
+          {phase === "results" && "게임 종료"}
         </div>
-        {players.length === 0 ? (
-          <div className="px-4 py-8 text-center text-white/30 text-sm">아직 접속자가 없습니다</div>
-        ) : (
-          <div className="divide-y divide-white/5">
-            {players.map((p, i) => {
-              const role = roles[p.id];
-              const voted = votes[p.id];
-              return (
-                <div key={p.id} className="px-4 py-3 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center font-mono text-[10px] text-white/60">
-                      {String(i + 1).padStart(2, "0")}
-                    </div>
-                    <div>
-                      <div className="text-white text-sm font-medium flex items-center gap-2">
-                        {p.name}
-                        {role === "killer" && (
-                          <span className="px-1.5 py-0.5 bg-rose-500/20 border border-rose-500/40 text-rose-300 font-mono text-[9px] tracking-wider">
-                            INFILTRATOR
-                          </span>
-                        )}
-                        {role === "citizen" && (
-                          <span className="px-1.5 py-0.5 bg-cyan-400/10 border border-cyan-400/30 text-cyan-300 font-mono text-[9px] tracking-wider">
-                            CITIZEN
-                          </span>
-                        )}
-                      </div>
-                      <div className="font-mono text-[10px] text-white/30">ID:{shortId(p.id)}</div>
-                    </div>
-                  </div>
-                  {voted && (
-                    <span className="font-mono text-[10px] text-emerald-400 tracking-wider">VOTED ✓</span>
-                  )}
-                </div>
-              );
-            })}
+        <p className="text-white/60 text-sm">
+          {phase === "lobby" && `${players.length}/${cfg.totalPlayers}명 접속`}
+          {phase === "playing" && ROUNDS[round]?.title}
+          {phase === "voting" && `${voteCount}/${cfg.totalPlayers}명 투표 완료`}
+          {phase === "results" && "결과 발표 완료"}
+        </p>
+        {(phase === "playing" || phase === "voting") && (
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <Countdown endsAt={phase === "playing" ? gameState.roundEndsAt : gameState.votingEndsAt} />
+            <button onClick={onRestartTimer} className="px-3 py-2 border border-white/15 text-white/70 text-xs hover:bg-white/5">
+              타이머 재시작
+            </button>
           </div>
         )}
       </div>
+
+      {phase === "lobby" && (
+        <>
+          <button
+            onClick={onStart}
+            disabled={!canStart}
+            className={`w-full py-5 font-bold text-lg flex items-center justify-center gap-3 transition-all anim-fade-up ${
+              canStart ? "bg-cyan-400 text-black hover:bg-cyan-300 anim-pulse-glow" : "bg-white/5 text-white/30 cursor-not-allowed"
+            }`}
+          >
+            <Play className="w-5 h-5" />
+            {canStart ? "게임 시작" : `${cfg.totalPlayers - players.length}명 더 필요`}
+          </button>
+          <p className="text-center text-white/40 text-xs">설정된 직업표에 맞춰 무작위 배정됩니다</p>
+        </>
+      )}
+
+      {phase === "playing" && (
+        <button onClick={onAdvance} className="w-full py-5 bg-amber-400 text-black font-bold text-lg flex items-center justify-center gap-3 hover:bg-amber-300 transition anim-pulse-glow">
+          {round < TOTAL_ROUNDS ? <><ChevronRight className="w-5 h-5" />다음 라운드 진행</> : <><Vote className="w-5 h-5" />투표 단계 시작</>}
+        </button>
+      )}
+
+      {phase === "voting" && (
+        <button
+          onClick={onEndVoting}
+          className={`w-full py-5 font-bold text-lg flex items-center justify-center gap-3 transition ${allVoted ? "bg-rose-500 text-white hover:bg-rose-400 anim-danger-glow" : "bg-amber-400 text-black hover:bg-amber-300"}`}
+        >
+          <Crosshair className="w-5 h-5" />
+          {allVoted ? "결과 발표" : `결과 발표 (${voteCount}/${cfg.totalPlayers})`}
+        </button>
+      )}
+
+      {phase === "results" && (
+        <button onClick={() => { if (confirm("게임을 초기화합니다. 계속하시겠습니까?")) onReset(); }} className="w-full py-5 bg-cyan-400 text-black font-bold text-lg flex items-center justify-center gap-3 hover:bg-cyan-300 transition">
+          <RotateCcw className="w-5 h-5" />
+          새 게임 시작
+        </button>
+      )}
+
+      {phase !== "results" && phase !== "lobby" && (
+        <button onClick={() => { if (confirm("정말 초기화하시겠습니까?")) onReset(); }} className="w-full py-3 border border-white/20 text-white/60 hover:bg-white/5 hover:text-white transition text-sm">
+          <RotateCcw className="inline w-4 h-4 mr-2" />
+          게임 강제 초기화
+        </button>
+      )}
+    </div>
+  );
+}
+
+function AdminVotingMonitor({ players, votes, gameConfig, onEndVoting }) {
+  const cfg = normalizeConfig(gameConfig);
+  const voted = Object.keys(votes);
+  const allVoted = voted.length === cfg.totalPlayers;
+
+  return (
+    <div className="px-5 py-5 space-y-4">
+      <div className="anim-fade-up">
+        <div className="font-mono text-[10px] text-rose-400/70 tracking-[0.3em] mb-2">// VOTING_IN_PROGRESS</div>
+        <h2 className="text-xl font-bold text-white mb-1">투표 진행 상황</h2>
+        <p className="text-white/50 text-sm">{voted.length}/{cfg.totalPlayers} 명 투표 완료</p>
+      </div>
+      <div className="border border-white/10 bg-white/[0.02] divide-y divide-white/5 stagger">
+        {players.map((p) => {
+          const did = !!votes[p.id];
+          return (
+            <div key={p.id} className="px-4 py-3 flex items-center justify-between anim-fade-up">
+              <div className="flex items-center gap-3">
+                <div className={`w-2 h-2 rounded-full ${did ? "bg-emerald-400" : "bg-white/20"}`} />
+                <span className="text-white text-sm">{p.name}</span>
+              </div>
+              <span className={`font-mono text-[10px] tracking-wider ${did ? "text-emerald-400" : "text-white/30"}`}>{did ? "VOTED" : "WAITING"}</span>
+            </div>
+          );
+        })}
+      </div>
+      <button onClick={onEndVoting} className={`w-full py-4 font-bold text-lg flex items-center justify-center gap-3 transition ${allVoted ? "bg-rose-500 text-white hover:bg-rose-400 anim-danger-glow" : "bg-amber-400 text-black hover:bg-amber-300"}`}>
+        <Crosshair className="w-5 h-5" />
+        {allVoted ? "결과 발표" : "강제 종료 후 결과 발표"}
+      </button>
+    </div>
+  );
+}
+
+function PlayerList({ players, roles, votes = {}, showRoles = false }) {
+  return (
+    <div className="border border-white/10 bg-white/[0.02] anim-fade-up">
+      <div className="px-4 py-3 border-b border-white/5 font-mono text-[10px] text-white/50 tracking-[0.25em]">// PLAYERS</div>
+      {players.length === 0 ? (
+        <div className="px-4 py-8 text-center text-white/30 text-sm">아직 접속자가 없습니다</div>
+      ) : (
+        <div className="divide-y divide-white/5">
+          {players.map((p, i) => {
+            const role = roles[p.id];
+            const def = getRoleDef(role);
+            const Icon = def.icon;
+            return (
+              <div key={p.id} className="px-4 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center font-mono text-[10px] text-white/60">
+                    {String(i + 1).padStart(2, "0")}
+                  </div>
+                  <div>
+                    <div className="text-white text-sm font-medium flex items-center gap-2">
+                      {p.name}
+                      {showRoles && role && (
+                        <span className={`px-1.5 py-0.5 border font-mono text-[9px] tracking-wider flex items-center gap-1 ${roleToneClasses(role)}`}>
+                          <Icon className="w-3 h-3" />
+                          {def.name}
+                        </span>
+                      )}
+                    </div>
+                    <div className="font-mono text-[10px] text-white/30">ID:{shortId(p.id)}</div>
+                  </div>
+                </div>
+                {votes[p.id] && <span className="font-mono text-[10px] text-emerald-400 tracking-wider">VOTED</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1685,240 +2024,175 @@ function StatCard({ label, value, icon: Icon, accent = "amber" }) {
   );
 }
 
-function AdminKillers({ players, roles, phase }) {
-  const killers = players.filter(p => roles[p.id] === "killer");
-
+function RoleSummary({ config }) {
+  const cfg = normalizeConfig(config);
   return (
-    <div className="px-5 py-5">
-      <div className="text-center mb-5 anim-fade-up">
-        <div className="font-mono text-[10px] text-rose-400/80 tracking-[0.3em] mb-2">// CLASSIFIED_INTEL</div>
-        <h2 className="text-xl font-bold text-rose-300 mb-1">잠입자 정보</h2>
-        <p className="text-white/40 text-xs">운영자만 볼 수 있는 기밀 정보입니다</p>
+    <div className="border border-white/10 bg-white/[0.02] p-4 anim-fade-up">
+      <div className="flex items-center justify-between mb-3">
+        <span className="font-mono text-[10px] text-white/50 tracking-[0.25em]">ROLE_TABLE</span>
+        <span className="font-mono text-[10px] text-cyan-300">{roleTotal(cfg)}/{cfg.totalPlayers}</span>
       </div>
-
-      {phase === "lobby" || killers.length === 0 ? (
-        <div className="border border-white/10 bg-white/[0.02] py-12 text-center">
-          <Lock className="w-8 h-8 text-white/30 mx-auto mb-3" />
-          <p className="text-white/50 text-sm mb-1">잠입자 미배정</p>
-          <p className="text-white/30 text-xs">게임 시작 시 자동으로 2명이 무작위 선정됩니다</p>
-        </div>
-      ) : (
-        <div className="space-y-3 stagger">
-          {killers.map((p, i) => (
-            <div key={p.id} className="border-2 border-rose-500/50 bg-gradient-to-r from-rose-950/30 to-transparent p-4 anim-fade-up relative">
-              <div className="absolute top-1 right-1 font-mono text-[9px] text-rose-400/70 tracking-wider">CONFIDENTIAL</div>
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 border-2 border-rose-500 bg-rose-500/10 flex items-center justify-center anim-danger-glow">
-                  <Skull className="w-6 h-6 text-rose-400" />
-                </div>
-                <div className="flex-1">
-                  <div className="font-mono text-[10px] text-rose-400 tracking-[0.2em] mb-0.5">INFILTRATOR_{i + 1}</div>
-                  <div className="text-2xl font-bold text-white">{p.name}</div>
-                  <div className="font-mono text-[10px] text-white/40">ID:{shortId(p.id)}</div>
-                </div>
-              </div>
-            </div>
-          ))}
-
-          <div className="mt-6 px-4 py-3 border border-amber-500/30 bg-amber-500/5">
-            <div className="flex gap-2">
-              <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-mono text-[10px] text-amber-400 tracking-wider mb-1">RULES_REMINDER</p>
-                <p className="text-amber-100/80 text-xs leading-relaxed">
-                  이 정보는 운영자에게만 표시됩니다. 잠입자들끼리는 비밀 채널에서 자유롭게 협력할 수 있습니다.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AdminChat({ chat, myId, myName, onSend, phase }) {
-  if (phase === "lobby") {
-    return (
-      <div className="px-5 py-12 text-center">
-        <Lock className="w-8 h-8 text-white/30 mx-auto mb-3" />
-        <p className="text-white/50 text-sm">채팅 비활성</p>
-        <p className="text-white/30 text-xs">게임 시작 후 잠입자 채팅이 활성화됩니다</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col h-[calc(100vh-180px)]">
-      <div className="px-5 py-3 bg-rose-950/20 border-b border-rose-500/30">
-        <div className="flex items-center gap-2">
-          <Eye className="w-3.5 h-3.5 text-amber-400" />
-          <span className="font-mono text-[10px] text-amber-400 tracking-[0.25em]">ADMIN_VIEW // 잠입자 채팅 모니터링</span>
-        </div>
-      </div>
-      <KillerChatPanel chat={chat} myId={myId} myName={myName} onSend={onSend} isAdmin={true} />
-    </div>
-  );
-}
-
-function AdminControl({ phase, round, players, votes, onStart, onAdvance, onEndVoting, onReset }) {
-  const canStart = phase === "lobby" && players.length === TOTAL_PLAYERS;
-  const allVoted = phase === "voting" && Object.keys(votes).length === TOTAL_PLAYERS;
-  const voteCount = Object.keys(votes).length;
-
-  return (
-    <div className="px-5 py-5 space-y-4">
-      <div className="anim-fade-up">
-        <div className="font-mono text-[10px] text-amber-400/70 tracking-[0.3em] mb-2">// GAME_CONTROL</div>
-        <h2 className="text-lg font-bold text-white mb-4">게임 진행</h2>
-      </div>
-
-      <div className="border border-amber-500/30 bg-amber-500/5 p-4 anim-fade-up">
-        <div className="font-mono text-[10px] text-amber-400 tracking-[0.25em] mb-2">CURRENT_PHASE</div>
-        <div className="text-2xl font-bold text-white mb-1">
-          {phase === "lobby" && "대기실"}
-          {phase === "playing" && `라운드 ${round} / ${TOTAL_ROUNDS}`}
-          {phase === "voting" && "투표 진행 중"}
-          {phase === "results" && "게임 종료"}
-        </div>
-        <p className="text-white/60 text-sm">
-          {phase === "lobby" && `${players.length}/${TOTAL_PLAYERS}명 접속`}
-          {phase === "playing" && ROUNDS[round]?.title}
-          {phase === "voting" && `${voteCount}/${TOTAL_PLAYERS}명 투표 완료`}
-          {phase === "results" && "결과 발표 완료"}
-        </p>
-      </div>
-
-      <div className="space-y-3 stagger">
-        {phase === "lobby" && (
-          <>
-            <button
-              onClick={onStart}
-              disabled={!canStart}
-              className={`w-full py-5 font-bold text-lg flex items-center justify-center gap-3 transition-all anim-fade-up ${
-                canStart
-                  ? "bg-cyan-400 text-black hover:bg-cyan-300 anim-pulse-glow"
-                  : "bg-white/5 text-white/30 cursor-not-allowed"
-              }`}
-            >
-              <Play className="w-5 h-5" />
-              {canStart ? "게임 시작 (잠입자 무작위 배정)" : `${TOTAL_PLAYERS - players.length}명 더 필요`}
-            </button>
-            <p className="text-center text-white/40 text-xs anim-fade-up">
-              시작 시 6명 중 2명이 자동으로 잠입자로 배정됩니다
-            </p>
-          </>
-        )}
-
-        {phase === "playing" && (
-          <>
-            <button
-              onClick={onAdvance}
-              className="w-full py-5 bg-amber-400 text-black font-bold text-lg flex items-center justify-center gap-3 hover:bg-amber-300 transition anim-pulse-glow anim-fade-up"
-            >
-              {round < TOTAL_ROUNDS ? (
-                <>
-                  <ChevronRight className="w-5 h-5" />
-                  다음 라운드 진행 (R{round + 1})
-                </>
-              ) : (
-                <>
-                  <Vote className="w-5 h-5" />
-                  투표 단계 시작
-                </>
-              )}
-            </button>
-            <p className="text-center text-white/40 text-xs anim-fade-up">
-              모든 플레이어 화면이 자동으로 다음 단계로 전환됩니다
-            </p>
-          </>
-        )}
-
-        {phase === "voting" && (
-          <>
-            <button
-              onClick={onEndVoting}
-              className={`w-full py-5 font-bold text-lg flex items-center justify-center gap-3 transition anim-fade-up ${
-                allVoted
-                  ? "bg-rose-500 text-white hover:bg-rose-400 anim-danger-glow"
-                  : "bg-amber-400/80 text-black hover:bg-amber-400"
-              }`}
-            >
-              <Crosshair className="w-5 h-5" />
-              {allVoted ? "결과 발표" : `결과 발표 (${voteCount}/${TOTAL_PLAYERS}만 투표)`}
-            </button>
-            <p className="text-center text-white/40 text-xs anim-fade-up">
-              {allVoted ? "모든 표가 집계되었습니다" : "아직 투표하지 않은 플레이어가 있습니다"}
-            </p>
-          </>
-        )}
-
-        {phase === "results" && (
-          <button
-            onClick={() => { if (confirm("게임을 초기화합니다. 계속하시겠습니까?")) onReset(); }}
-            className="w-full py-5 bg-cyan-400 text-black font-bold text-lg flex items-center justify-center gap-3 hover:bg-cyan-300 transition anim-fade-up"
-          >
-            <RotateCcw className="w-5 h-5" />
-            새 게임 시작 (전체 초기화)
-          </button>
-        )}
-
-        {phase !== "results" && phase !== "lobby" && (
-          <button
-            onClick={() => { if (confirm("정말 초기화하시겠습니까? 진행 중인 게임이 모두 사라집니다.")) onReset(); }}
-            className="w-full py-3 border border-white/20 text-white/60 hover:bg-white/5 hover:text-white transition text-sm anim-fade-up"
-          >
-            <RotateCcw className="inline w-4 h-4 mr-2" />
-            게임 강제 초기화
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function AdminVotingMonitor({ players, votes, onEndVoting }) {
-  const voted = Object.keys(votes);
-  const allVoted = voted.length === TOTAL_PLAYERS;
-
-  return (
-    <div className="px-5 py-5 space-y-4">
-      <div className="anim-fade-up">
-        <div className="font-mono text-[10px] text-rose-400/70 tracking-[0.3em] mb-2">// VOTING_IN_PROGRESS</div>
-        <h2 className="text-xl font-bold text-white mb-1">투표 진행 상황</h2>
-        <p className="text-white/50 text-sm">{voted.length}/{TOTAL_PLAYERS} 명 투표 완료</p>
-      </div>
-
-      <div className="border border-white/10 bg-white/[0.02] divide-y divide-white/5 stagger">
-        {players.map(p => {
-          const did = !!votes[p.id];
+      <div className="grid grid-cols-2 gap-2">
+        {Object.entries(cfg.roles).filter(([, count]) => count > 0).map(([role, count]) => {
+          const def = getRoleDef(role);
+          const Icon = def.icon;
           return (
-            <div key={p.id} className="px-4 py-3 flex items-center justify-between anim-fade-up">
-              <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${did ? "bg-emerald-400" : "bg-white/20"}`} />
-                <span className="text-white text-sm">{p.name}</span>
-              </div>
-              <span className={`font-mono text-[10px] tracking-wider ${
-                did ? "text-emerald-400" : "text-white/30"
-              }`}>
-                {did ? "VOTED ✓" : "WAITING..."}
-              </span>
+            <div key={role} className={`border px-3 py-2 flex items-center gap-2 ${roleToneClasses(role)}`}>
+              <Icon className="w-3.5 h-3.5" />
+              <span className="text-xs text-white/85 flex-1">{def.name}</span>
+              <span className="font-mono text-xs">{count}</span>
             </div>
           );
         })}
       </div>
+    </div>
+  );
+}
 
-      <button
-        onClick={onEndVoting}
-        className={`w-full py-4 font-bold text-lg flex items-center justify-center gap-3 transition anim-fade-up ${
-          allVoted
-            ? "bg-rose-500 text-white hover:bg-rose-400 anim-danger-glow"
-            : "bg-amber-400 text-black hover:bg-amber-300"
-        }`}
-      >
-        <Crosshair className="w-5 h-5" />
-        {allVoted ? "결과 발표" : "강제 종료 후 결과 발표"}
-      </button>
+function Corner({ tone = "cyan", thick = false }) {
+  const color = tone === "rose" ? "border-rose-500" : "border-cyan-400";
+  const width = thick ? "border-t-2 border-l-2" : "border-t border-l";
+  const widthR = thick ? "border-t-2 border-r-2" : "border-t border-r";
+  const widthB = thick ? "border-b-2 border-l-2" : "border-b border-l";
+  const widthBR = thick ? "border-b-2 border-r-2" : "border-b border-r";
+  return (
+    <>
+      <div className={`absolute top-2 left-2 w-3 h-3 ${width} ${color}`} />
+      <div className={`absolute top-2 right-2 w-3 h-3 ${widthR} ${color}`} />
+      <div className={`absolute bottom-2 left-2 w-3 h-3 ${widthB} ${color}`} />
+      <div className={`absolute bottom-2 right-2 w-3 h-3 ${widthBR} ${color}`} />
+    </>
+  );
+}
+
+// ===================== TEST LAB =====================
+function TestLab({ onExit }) {
+  const demoConfig = useMemo(
+    () =>
+      normalizeConfig({
+        totalPlayers: 8,
+        roundSeconds: 180,
+        roles: { killer: 2, detective: 1, doctor: 1, bodyguard: 1, shaman: 1, spy: 0 },
+      }),
+    [],
+  );
+  const demoPlayers = useMemo(
+    () => [
+      { id: "p1", name: "마피아A", joinedAt: Date.now() - 4000 },
+      { id: "p2", name: "마피아B", joinedAt: Date.now() - 12000 },
+      { id: "p3", name: "경찰", joinedAt: Date.now() - 22000 },
+      { id: "p4", name: "의사", joinedAt: Date.now() - 32000 },
+      { id: "p5", name: "보디가드", joinedAt: Date.now() - 42000 },
+      { id: "p6", name: "영매", joinedAt: Date.now() - 52000 },
+      { id: "p7", name: "시민A", joinedAt: Date.now() - 62000 },
+      { id: "p8", name: "시민B", joinedAt: Date.now() - 72000 },
+    ],
+    [],
+  );
+  const demoRoles = {
+    p1: "killer",
+    p2: "killer",
+    p3: "detective",
+    p4: "doctor",
+    p5: "bodyguard",
+    p6: "shaman",
+    p7: "citizen",
+    p8: "citizen",
+  };
+  const [view, setView] = useState("master");
+  const [chat, setChat] = useState([
+    { id: "c1", senderId: "p1", senderName: "마피아A", text: "경찰인 척은 아직 하지 말자.", timestamp: Date.now() - 40000 },
+  ]);
+  const [votes, setVotes] = useState({});
+  const [testState, setTestState] = useState(() => {
+    const now = Date.now();
+    return { phase: "playing", round: 2, startedAt: now - 60000, roundStartedAt: now - 20000, roundEndsAt: now + 160000 };
+  });
+  const currentId = view === "master" ? "master" : view;
+  const currentPlayer = demoPlayers.find((p) => p.id === currentId);
+
+  const sendChat = (text) => {
+    setChat((list) => [
+      ...list,
+      {
+        id: genId(),
+        senderId: currentId,
+        senderName: view === "master" ? "마스터" : currentPlayer?.name || "테스트",
+        isAdmin: view === "master",
+        text,
+        timestamp: Date.now(),
+      },
+    ]);
+  };
+
+  const restartTimer = () => {
+    const now = Date.now();
+    setTestState((prev) => ({ ...prev, roundStartedAt: now, roundEndsAt: now + demoConfig.roundSeconds * 1000, votingEndsAt: now + demoConfig.roundSeconds * 1000 }));
+  };
+
+  return (
+    <div className="min-h-screen">
+      <div className="sticky top-0 z-50 border-b border-white/10 bg-black/90 backdrop-blur px-3 py-3">
+        <div className="max-w-md mx-auto flex items-center gap-2">
+          <button onClick={onExit} className="w-9 h-9 border border-white/10 flex items-center justify-center text-white/60">
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div className="flex-1 overflow-x-auto flex gap-2 scrollbar-thin">
+            {[
+              { id: "master", label: "마스터", role: "killer" },
+              { id: "p1", label: "마피아", role: "killer" },
+              { id: "p3", label: "경찰", role: "detective" },
+              { id: "p4", label: "의사", role: "doctor" },
+              { id: "p5", label: "보디가드", role: "bodyguard" },
+              { id: "p6", label: "영매", role: "shaman" },
+              { id: "p7", label: "시민", role: "citizen" },
+            ].map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setView(item.id)}
+                className={`px-3 py-2 border text-xs whitespace-nowrap ${view === item.id ? roleToneClasses(item.role) : "border-white/10 text-white/55 bg-white/[0.02]"}`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {view === "master" ? (
+        <AdminScreen
+          myId="master"
+          gameState={testState}
+          gameConfig={demoConfig}
+          players={demoPlayers}
+          roles={demoRoles}
+          chat={chat}
+          votes={votes}
+          onSaveConfig={() => {}}
+          onStart={() => {}}
+          onAdvance={() => setTestState((prev) => ({ ...prev, round: Math.min(TOTAL_ROUNDS, prev.round + 1) }))}
+          onRestartTimer={restartTimer}
+          onEndVoting={() => setTestState((prev) => ({ ...prev, phase: "results" }))}
+          onReset={() => setTestState((prev) => ({ ...prev, phase: "lobby", round: 0 }))}
+          onSendChat={sendChat}
+          onLeave={onExit}
+        />
+      ) : (
+        <PlayerScreen
+          myId={currentId}
+          myName={currentPlayer?.name || "테스트"}
+          myRole={demoRoles[currentId]}
+          gameState={testState}
+          gameConfig={demoConfig}
+          players={demoPlayers}
+          roles={demoRoles}
+          chat={chat}
+          votes={votes}
+          onSendChat={sendChat}
+          onSubmitVote={(targets) => setVotes((prev) => ({ ...prev, [currentId]: targets }))}
+          onLeave={onExit}
+        />
+      )}
     </div>
   );
 }
